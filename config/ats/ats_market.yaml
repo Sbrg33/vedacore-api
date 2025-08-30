@@ -1,0 +1,16 @@
+# Minimal ATS context for API initialization in lean build
+event: market_intraday
+transfer_decay: 0.70
+max_hops: 3
+caps:
+  per_source: 2.0
+planet_weight_base:
+  VEN: 1.08
+  MER: 1.05
+  JUP: 1.02
+  SUN: 1.00
+  MOON: 1.00
+  MAR: 0.99
+  SAT: 0.98
+  RAH: 1.00
+  KET: 0.99

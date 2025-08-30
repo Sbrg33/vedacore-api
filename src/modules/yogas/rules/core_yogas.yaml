@@ -1,0 +1,265 @@
+# Core Vedic Yogas - Wealth, Power, and Spiritual combinations
+
+yogas:
+  # Dhana Yogas (Wealth Combinations)
+  - name: Lakshmi Yoga
+    category: wealth
+    priority: 90
+    description: Venus in own sign or exaltation in kendra/trikona with lord of 9th
+    conditions:
+      - type: planet_in_house
+        planet: 6  # Venus
+        house: [1, 4, 5, 7, 9, 10]
+      - type: planet_exalted
+        planet: 6
+    strength_factors:
+      - type: planet_strength
+        planet: 6
+        weight: 20
+    effects:
+      - Abundant wealth and prosperity
+      - Luxurious lifestyle
+      - Success in business
+    
+  - name: Dhana Yoga Basic
+    category: wealth
+    priority: 70
+    description: Lord of 2nd in conjunction with lord of 11th
+    conditions:
+      - type: lordship
+        planet: 2
+        rules_houses: [2]
+      - type: lordship
+        planet: 11
+        rules_houses: [11]
+      - type: planets_conjunct
+        planet1: 2
+        planet2: 11
+        orb: 10
+    effects:
+      - Financial gains
+      - Multiple income sources
+      - Wealth accumulation
+
+  # Raja Yogas (Power and Authority)
+  - name: Dharma Karmadhipati Yoga
+    category: power
+    priority: 95
+    description: Lords of 9th and 10th in mutual exchange or conjunction
+    conditions:
+      - type: exchange
+        planet1: 9
+        planet2: 10
+    effects:
+      - High position and authority
+      - Success in career
+      - Fame and recognition
+      - Ethical leadership
+
+  - name: Gaja Kesari Yoga
+    category: power
+    priority: 85
+    description: Jupiter in kendra from Moon
+    conditions:
+      - type: planets_in_kendras
+        planets: [3]  # Jupiter
+    strength_factors:
+      - type: planet_strength
+        planet: 3
+        weight: 25
+    effects:
+      - Intelligence and wisdom
+      - Good reputation
+      - Success in endeavors
+      - Long life
+    cancellations:
+      - type: debilitated_planet
+        planet: 3
+      - type: combust_planet
+        planet: 3
+
+  # Pancha Mahapurusha Yogas
+  - name: Hamsa Yoga
+    category: mahapurusha
+    priority: 100
+    description: Jupiter in own sign or exaltation in kendra
+    conditions:
+      - type: planet_in_house
+        planet: 3  # Jupiter
+        house: [1, 4, 7, 10]
+      - type: planet_in_sign
+        planet: 3
+        sign: [4, 9, 12]  # Cancer (exaltation), Sagittarius, Pisces
+    effects:
+      - Spiritual wisdom
+      - Noble character
+      - Teaching ability
+      - Religious leadership
+
+  - name: Malavya Yoga
+    category: mahapurusha
+    priority: 100
+    description: Venus in own sign or exaltation in kendra
+    conditions:
+      - type: planet_in_house
+        planet: 6  # Venus
+        house: [1, 4, 7, 10]
+      - type: planet_in_sign
+        planet: 6
+        sign: [2, 7, 12]  # Taurus, Libra, Pisces (exaltation)
+    effects:
+      - Artistic talents
+      - Luxury and comfort
+      - Beautiful appearance
+      - Happy married life
+
+  - name: Ruchaka Yoga
+    category: mahapurusha
+    priority: 100
+    description: Mars in own sign or exaltation in kendra
+    conditions:
+      - type: planet_in_house
+        planet: 9  # Mars
+        house: [1, 4, 7, 10]
+      - type: planet_in_sign
+        planet: 9
+        sign: [1, 8, 10]  # Aries, Scorpio, Capricorn (exaltation)
+    effects:
+      - Courage and valor
+      - Leadership qualities
+      - Military success
+      - Athletic ability
+
+  - name: Bhadra Yoga
+    category: mahapurusha
+    priority: 100
+    description: Mercury in own sign or exaltation in kendra
+    conditions:
+      - type: planet_in_house
+        planet: 5  # Mercury
+        house: [1, 4, 7, 10]
+      - type: planet_in_sign
+        planet: 5
+        sign: [3, 6]  # Gemini, Virgo (own and exaltation)
+    effects:
+      - Intelligence and wit
+      - Communication skills
+      - Business acumen
+      - Literary talents
+
+  - name: Sasa Yoga
+    category: mahapurusha
+    priority: 100
+    description: Saturn in own sign or exaltation in kendra
+    conditions:
+      - type: planet_in_house
+        planet: 8  # Saturn
+        house: [1, 4, 7, 10]
+      - type: planet_in_sign
+        planet: 8
+        sign: [7, 10, 11]  # Libra (exaltation), Capricorn, Aquarius
+    effects:
+      - Discipline and patience
+      - Administrative ability
+      - Long life
+      - Success through perseverance
+
+  # Viparita Raja Yogas (Success from adversity)
+  - name: Harsha Yoga
+    category: viparita
+    priority: 75
+    description: Lord of 6th in 6th house
+    conditions:
+      - type: lordship
+        planet: 6
+        rules_houses: [6]
+      - type: planet_in_house
+        planet: 6
+        house: 6
+    effects:
+      - Victory over enemies
+      - Good health
+      - Success in competition
+      - Service opportunities
+
+  - name: Sarala Yoga
+    category: viparita
+    priority: 75
+    description: Lord of 8th in 8th house
+    conditions:
+      - type: lordship
+        planet: 8
+        rules_houses: [8]
+      - type: planet_in_house
+        planet: 8
+        house: 8
+    effects:
+      - Long life
+      - Inheritance gains
+      - Occult knowledge
+      - Transformation power
+
+  - name: Vimala Yoga
+    category: viparita
+    priority: 75
+    description: Lord of 12th in 12th house
+    conditions:
+      - type: lordship
+        planet: 12
+        rules_houses: [12]
+      - type: planet_in_house
+        planet: 12
+        house: 12
+    effects:
+      - Spiritual progress
+      - Foreign benefits
+      - Charitable nature
+      - Liberation tendencies
+
+  # Special Combinations
+  - name: Budhaditya Yoga
+    category: intelligence
+    priority: 80
+    description: Sun and Mercury conjunction
+    conditions:
+      - type: planets_conjunct
+        planet1: 1  # Sun
+        planet2: 5  # Mercury
+        orb: 10
+    effects:
+      - Sharp intellect
+      - Good communication
+      - Administrative skills
+      - Success in education
+    cancellations:
+      - type: combust_planet
+        planet: 5  # Mercury combust cancels benefits
+
+  - name: Chandra Mangal Yoga
+    category: wealth
+    priority: 70
+    description: Moon and Mars conjunction
+    conditions:
+      - type: planets_conjunct
+        planet1: 2  # Moon
+        planet2: 9  # Mars
+        orb: 10
+    effects:
+      - Financial gains
+      - Property acquisition
+      - Business success
+      - Bold decisions
+
+  - name: Neecha Bhanga Raja Yoga
+    category: special
+    priority: 85
+    description: Debilitation cancellation forming raja yoga
+    conditions:
+      - type: planet_debilitated
+        planet: any
+      - type: cancellation_present
+    effects:
+      - Rise from humble beginnings
+      - Success after struggle
+      - Ultimate achievement
+      - Karmic rewards

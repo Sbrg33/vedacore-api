@@ -1,0 +1,212 @@
+# Kala Sarpa Yoga variations and rules
+
+yogas:
+  # Complete Kala Sarpa Yoga
+  - name: Kala Sarpa Yoga (Complete)
+    category: karmic
+    priority: 95
+    description: All planets hemmed between Rahu and Ketu
+    conditions:
+      - type: all_planets_hemmed
+        between: [4, 7]  # Rahu and Ketu
+        planets: [1, 2, 3, 5, 6, 8, 9]  # All except nodes
+    effects:
+      - Karmic challenges
+      - Delayed success
+      - Spiritual evolution
+      - Extreme life experiences
+      - Success after 42 years
+    strength_factors:
+      - type: no_planet_with_nodes
+        weight: 20
+      - type: malefic_nodes
+        weight: 15
+    cancellations:
+      - type: planet_with_node
+        description: Any planet conjunct with Rahu or Ketu
+
+  # Partial Kala Sarpa
+  - name: Kala Sarpa Yoga (Partial)
+    category: karmic
+    priority: 70
+    description: Most planets hemmed between Rahu and Ketu with 1-2 exceptions
+    conditions:
+      - type: most_planets_hemmed
+        between: [4, 7]
+        minimum_planets: 5
+    effects:
+      - Moderate karmic influences
+      - Periodic obstacles
+      - Mixed results
+      - Spiritual inclination
+
+  # Kala Amrita Yoga (Reverse)
+  - name: Kala Amrita Yoga
+    category: karmic
+    priority: 85
+    description: All planets hemmed between Ketu and Rahu (reverse direction)
+    conditions:
+      - type: all_planets_hemmed
+        between: [7, 4]  # Ketu to Rahu
+        planets: [1, 2, 3, 5, 6, 8, 9]
+    effects:
+      - Spiritual blessings
+      - Material detachment
+      - Wisdom and insight
+      - Success in spiritual pursuits
+      - Liberation tendencies
+
+  # Specific Kala Sarpa Types by House Position
+  - name: Ananta Kala Sarpa Yoga
+    category: karmic_subtype
+    priority: 60
+    description: Rahu in 1st house, Ketu in 7th house
+    conditions:
+      - type: planet_in_house
+        planet: 4  # Rahu
+        house: 1
+      - type: planet_in_house
+        planet: 7  # Ketu
+        house: 7
+      - type: all_planets_hemmed
+        between: [4, 7]
+    effects:
+      - Relationship challenges
+      - Self vs others conflicts
+      - Identity struggles
+      - Partnership karma
+
+  - name: Kulika Kala Sarpa Yoga
+    category: karmic_subtype
+    priority: 60
+    description: Rahu in 2nd house, Ketu in 8th house
+    conditions:
+      - type: planet_in_house
+        planet: 4
+        house: 2
+      - type: planet_in_house
+        planet: 7
+        house: 8
+      - type: all_planets_hemmed
+        between: [4, 7]
+    effects:
+      - Financial fluctuations
+      - Family karma
+      - Transformation through crisis
+      - Hidden wealth potential
+
+  - name: Vasuki Kala Sarpa Yoga
+    category: karmic_subtype
+    priority: 60
+    description: Rahu in 3rd house, Ketu in 9th house
+    conditions:
+      - type: planet_in_house
+        planet: 4
+        house: 3
+      - type: planet_in_house
+        planet: 7
+        house: 9
+      - type: all_planets_hemmed
+        between: [4, 7]
+    effects:
+      - Communication issues
+      - Sibling karma
+      - Religious conflicts
+      - Travel challenges
+
+  - name: Shankhapal Kala Sarpa Yoga
+    category: karmic_subtype
+    priority: 60
+    description: Rahu in 4th house, Ketu in 10th house
+    conditions:
+      - type: planet_in_house
+        planet: 4
+        house: 4
+      - type: planet_in_house
+        planet: 7
+        house: 10
+      - type: all_planets_hemmed
+        between: [4, 7]
+    effects:
+      - Home vs career conflicts
+      - Mother relationship karma
+      - Property issues
+      - Professional instability
+
+  - name: Padma Kala Sarpa Yoga
+    category: karmic_subtype
+    priority: 60
+    description: Rahu in 5th house, Ketu in 11th house
+    conditions:
+      - type: planet_in_house
+        planet: 4
+        house: 5
+      - type: planet_in_house
+        planet: 7
+        house: 11
+      - type: all_planets_hemmed
+        between: [4, 7]
+    effects:
+      - Children related karma
+      - Creative blocks
+      - Speculation losses
+      - Friend circle issues
+
+  - name: Mahapadma Kala Sarpa Yoga
+    category: karmic_subtype
+    priority: 60
+    description: Rahu in 6th house, Ketu in 12th house
+    conditions:
+      - type: planet_in_house
+        planet: 4
+        house: 6
+      - type: planet_in_house
+        planet: 7
+        house: 12
+      - type: all_planets_hemmed
+        between: [4, 7]
+    effects:
+      - Health challenges
+      - Service karma
+      - Foreign connections
+      - Spiritual growth through adversity
+
+  # Kala Sarpa Dosha Cancellations
+  - name: Kala Sarpa Cancellation - Benefic Conjunction
+    category: cancellation
+    priority: 50
+    description: Benefic planet conjunct with Rahu or Ketu cancels dosha
+    conditions:
+      - type: kala_sarpa_present
+      - type: benefic_with_node
+        benefics: [2, 3, 5, 6]  # Moon, Jupiter, Mercury, Venus
+    effects:
+      - Dosha effects reduced
+      - Benefic protection
+      - Easier karmic lessons
+
+  - name: Kala Sarpa Cancellation - Strong Lagna Lord
+    category: cancellation
+    priority: 50
+    description: Strong ascendant lord reduces Kala Sarpa effects
+    conditions:
+      - type: kala_sarpa_present
+      - type: lagna_lord_strong
+        min_strength: 60
+    effects:
+      - Personal willpower overcomes obstacles
+      - Reduced karmic burden
+      - Success through effort
+
+  - name: Kala Sarpa Cancellation - Raja Yoga
+    category: cancellation
+    priority: 50
+    description: Presence of strong Raja Yoga mitigates Kala Sarpa
+    conditions:
+      - type: kala_sarpa_present
+      - type: raja_yoga_present
+        min_strength: 70
+    effects:
+      - Power overcomes obstacles
+      - Success despite challenges
+      - Karmic rewards

@@ -1,0 +1,51 @@
+name: Deploy (SSH via GHCR)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (default: latest)"
+        default: "latest"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: /opt/vedacore-api
+      PORT: 8123
+    steps:
+      - name: Deploy on server (pull image)
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.DO_PORT || '22' }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            IMAGE="ghcr.io/${{ github.repository_owner }}/vedacore-api:${{ inputs.tag || 'latest' }}"
+            # Login to GHCR (read:packages token)
+            docker login ghcr.io -u "$GHCR_USERNAME" -p "$GHCR_TOKEN"
+            # Pull & restart container
+            docker rm -f vedacore-api || true
+            docker pull "$IMAGE"
+            docker run -d --rm --name vedacore-api \
+              -p ${PORT}:8123 \
+              -e ENVIRONMENT=production \
+              -e AUTH_JWT_SECRET="${AUTH_JWT_SECRET}" \
+              -e CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS}" \
+              "$IMAGE"
+            # Wait for readiness
+            i=0; ok=0; \
+            while [ $i -lt 45 ]; do \
+              if curl -fsS http://127.0.0.1:${PORT}/api/v1/health/ready >/dev/null 2>&1; then ok=1; break; fi; \
+              i=$((i+1)); sleep 2; \
+            done; \
+            if [ $ok -eq 1 ]; then echo "✅ Ready"; else echo "❌ Not ready"; docker logs vedacore-api || true; exit 1; fi

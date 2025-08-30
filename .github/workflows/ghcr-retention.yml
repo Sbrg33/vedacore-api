@@ -1,0 +1,24 @@
+name: GHCR Retention / Cleanup
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'  # Weekly, Sundays 03:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Delete old container versions
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ github.repository_owner }}
+          package-name: vedacore-api
+          package-type: container
+          min-versions-to-keep: 15
+          # Optionally limit scope (example to delete only untagged):
+          # delete-only-untagged-versions: true
+
