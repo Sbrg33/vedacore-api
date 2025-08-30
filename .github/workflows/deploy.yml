@@ -7,6 +7,10 @@ on:
         description: "Image tag to deploy (default: latest)"
         default: "latest"
         required: false
+      public_url:
+        description: "Public URL to test (default: https://api.vedacore.io)"
+        default: "https://api.vedacore.io"
+        required: false
 
 jobs:
   deploy:
@@ -49,3 +53,30 @@ jobs:
               i=$((i+1)); sleep 2; \
             done; \
             if [ $ok -eq 1 ]; then echo "✅ Ready"; else echo "❌ Not ready"; docker logs vedacore-api || true; exit 1; fi
+
+  post-smoke:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Public API smoke test
+        run: |
+          set -euo pipefail
+          PUBLIC_URL="${{ inputs.public_url || 'https://api.vedacore.io' }}"
+          
+          echo "🔍 Testing public readiness: $PUBLIC_URL/api/v1/health/ready"
+          if curl -fsS "$PUBLIC_URL/api/v1/health/ready" >/dev/null; then
+            echo "✅ Public readiness check passed"
+          else
+            echo "❌ Public readiness check failed"
+            exit 1
+          fi
+          
+          echo "🔍 Testing docs endpoint: $PUBLIC_URL/api/docs"
+          if curl -fsS "$PUBLIC_URL/api/docs" >/dev/null; then
+            echo "✅ Public docs endpoint accessible"
+          else
+            echo "❌ Public docs endpoint failed"
+            exit 1
+          fi
+          
+          echo "✅ Post-deploy public smoke tests completed successfully"
