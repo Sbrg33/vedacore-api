@@ -117,6 +117,17 @@ curl -fsS http://127.0.0.1:8000/api/v1/health/ready
 Notes:
 - Prefer immutable tags (e.g., `sha-<commit>`) for rollbacks.
 
+## Production Checklist
+
+- Auth & Env: set `ENVIRONMENT=production`, `VC_ENV=remote`; configure either `AUTH_JWKS_URL` (preferred) or a strong `AUTH_JWT_SECRET` (≥32 chars). Set `API_KEY_V1_CUTOFF_DATE` to enable API key routing middleware.
+- CORS: define `CORS_ALLOWED_ORIGINS` with explicit, protocol‑prefixed domains (no wildcards in production).
+- Image Tag: deploy pinned GHCR tag `sha-<long-commit>`; avoid `latest`. Validate with `GET /api/v1/version`.
+- Ports & Health: expose `-p 80:8000` (or set `PORT`); ensure port 80 is free (stop nginx/apache if not used). Monitors should hit `/api/v1/health/up`; readiness gate at `/api/v1/health/ready`.
+- Metrics & Workers: set `PROMETHEUS_MULTIPROC_DIR` (writable) and `WORKERS` as desired; confirm `/metrics` responds.
+- Optional Redis: set `REDIS_URL` for backpressure and token auditing; service runs without it but with reduced hardening.
+- ATS (optional): enable via `ENABLE_ATS=true`; symbol policy is strict (3‑letter) and integers 1–9 are accepted.
+- Quick verify: `make check-health BASE=https://api.vedacore.io`, `curl -fsS <PUBLIC_URL>/api/docs >/dev/null && echo OK`, `curl -s <PUBLIC_URL>/api/v1/version`.
+
 ## Observability
 
 - `/api/v1/health/up`: plaintext "ok" for liveness probes.
