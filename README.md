@@ -227,6 +227,8 @@ kp_emphasis:
   ssl: 1.05
 ```
 
+Defaults are provided in `config/ats/ats_market.yaml` with conservative KP emphasis values (`nl: 1.10`, `sl: 1.05`, `ssl: 1.02`) and standard aspect orbs/weights. Adjust these to tune scoring for your environment.
+
 - Readiness 503: missing auth (`AUTH_JWT_SECRET`/`AUTH_JWKS_URL`) or CORS misconfig in prod.
 - CORS errors: ensure comma-separated origins with `http(s)://` prefix; no wildcard in prod.
 - 401 on streaming: validate token and `AUTH_AUDIENCE`/`AUTH_ISSUER`.
