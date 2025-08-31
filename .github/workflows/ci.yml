@@ -59,3 +59,9 @@ jobs:
         env:
           AUTH_JWT_SECRET: dev-secret-for-ci
           PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+      - name: Run ATS symbol contract tests
+        run: |
+          PYTHONPATH=./src:. pytest -q tests/test_ats_symbols.py
+        env:
+          AUTH_JWT_SECRET: dev-secret-for-ci
+          PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus

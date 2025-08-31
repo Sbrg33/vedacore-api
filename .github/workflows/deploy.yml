@@ -143,5 +143,26 @@ jobs:
             echo "❌ Public docs endpoint failed"
             exit 1
           fi
+
+          echo "🔍 ATS symbols acceptance: [\"VEN\",\"MER\"] (should be 200)"
+          if curl -fsS -X POST "$PUBLIC_URL/api/v1/ats/transit" \
+               -H 'accept: application/json' -H 'content-type: application/json' \
+               -d '{"targets":["VEN","MER"]}' >/dev/null; then
+            echo "✅ ATS symbols accepted"
+          else
+            echo "❌ ATS symbols not accepted"
+            exit 1
+          fi
+
+          echo "🔍 ATS old tokens rejection: [\"MERC\",\"MOON\"] (should be 422)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$PUBLIC_URL/api/v1/ats/transit" \
+               -H 'accept: application/json' -H 'content-type: application/json' \
+               -d '{"targets":["MERC","MOON"]}')
+          if [ "$STATUS" = "422" ]; then
+            echo "✅ Old tokens correctly rejected (422)"
+          else
+            echo "❌ Expected 422 for old tokens, got $STATUS"
+            exit 1
+          fi
           
           echo "✅ Post-deploy public smoke tests completed successfully"
