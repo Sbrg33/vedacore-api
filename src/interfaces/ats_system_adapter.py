@@ -45,6 +45,29 @@ ID_TO_ATS = {
 ATS_TO_ID = {v: k for k, v in ID_TO_ATS.items()}
 
 
+# Common alias mapping (KP 2-letter and legacy 3-letter → ATS canonical)
+ALIASES = {
+    "SU": "SUN",
+    "MO": "MOON",
+    "JU": "JUP",
+    "RA": "RAH",
+    "ME": "MERC",
+    "MER": "MERC",
+    "VE": "VEN",
+    "KE": "KET",
+    "SA": "SAT",
+    "MA": "MAR",
+}
+
+
+def _canon(name: str) -> str:
+    """Canonicalize planet token to ATS internal symbol."""
+    if not isinstance(name, str):
+        return name
+    n = name.upper()
+    return ALIASES.get(n, n)
+
+
 class ATSSystemAdapter(BaseSystemAdapter):
     """
     ATS System Adapter - bridges VedaCore to ATS scoring engine
@@ -91,7 +114,7 @@ class ATSSystemAdapter(BaseSystemAdapter):
 
         self.context_yaml = context_yaml
         self.ref_norm = 1.5  # Reference for 0-100 scaling
-        self.default_targets = ("VEN", "MER")  # Default scoring targets
+        self.default_targets = ("VEN", "MERC")  # Default scoring targets
 
         # Cache loaded context
         self._context_cache = None
@@ -138,15 +161,17 @@ class ATSSystemAdapter(BaseSystemAdapter):
         if ts_utc.tzinfo is None:
             ts_utc = ts_utc.replace(tzinfo=UTC)
 
-        # Get targets (can be numeric IDs or string names)
-        targets = kwargs.get("targets", self.default_targets)
+        # Get targets (can be numeric IDs or string names). If None/empty, use defaults.
+        targets = kwargs.get("targets")
+        if not targets:
+            targets = self.default_targets
 
         # Convert numeric IDs to ATS strings if needed
         if targets and isinstance(targets[0], int):
-            targets = tuple(ID_TO_ATS.get(t, f"UNKNOWN_{t}") for t in targets)
+            targets = tuple(_canon(ID_TO_ATS.get(t, f"UNKNOWN_{t}")) for t in targets)
         elif targets and isinstance(targets[0], str):
-            # Ensure uppercase for consistency
-            targets = tuple(t.upper() for t in targets)
+            # Normalize aliases to canonical tokens
+            targets = tuple(_canon(t) for t in targets)
 
         # Override context if specified
         if "context_yaml" in kwargs:
@@ -177,6 +202,8 @@ class ATSSystemAdapter(BaseSystemAdapter):
             nl, sl, ssl = self.facade.get_moon_chain(
                 ts_utc
             )  # Returns ('JUP', 'VEN', 'MER')
+            # Canonicalize KP chain values to ATS tokens (e.g., MER → MERC)
+            nl, sl, ssl = (_canon(nl), _canon(sl), _canon(ssl))
 
             # Optional: get planet chains for all planets
             planet_chains = (
@@ -184,6 +211,20 @@ class ATSSystemAdapter(BaseSystemAdapter):
                 if hasattr(self.facade, "get_planet_chains")
                 else {}
             )
+            # Canonicalize any planet chain keys/values if present
+            if planet_chains:
+                try:
+                    _pc_norm = {}
+                    for k, chain in planet_chains.items():
+                        nk = _canon(k)
+                        if isinstance(chain, (list, tuple)) and len(chain) == 3:
+                            _pc_norm[nk] = tuple(_canon(x) for x in chain)
+                        else:
+                            _pc_norm[nk] = chain
+                    planet_chains = _pc_norm
+                except Exception:
+                    # Best-effort normalization; proceed if structure differs
+                    pass
 
             # Build KP state
             kp = KPState(
