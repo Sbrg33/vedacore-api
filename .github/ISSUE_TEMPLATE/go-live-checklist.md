@@ -46,6 +46,12 @@ Checklist
   - Transit (neutral zeros with minimal ATS): `curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit -H 'content-type: application/json' -d '{}'`
   - Config: `curl -sS http://127.0.0.1:8000/api/v1/ats/config | jq .`
 
+- [ ] KP Ruling Planets (KP v1)
+  - RP (defaults):
+    `curl -sS -X POST http://127.0.0.1:8000/api/v1/kp/ruling-planets -H 'content-type: application/json' -d '{"datetime":"2025-09-01T14:00:00Z","lat":40.7128,"lon":-74.0060}' | jq .`
+  - RP (custom weights):
+    `curl -sS -X POST http://127.0.0.1:8000/api/v1/kp/ruling-planets -H 'content-type: application/json' -d '{"datetime":"2025-09-01T14:00:00Z","lat":40.7128,"lon":-74.0060,"include_day_lord":true,"weights":{"asc_nl":3.0,"moon_nl":2.0}}' | jq .`
+
 Notes
 
 - Deploy workflow sets: `ENVIRONMENT=production`, `VC_ENV=remote`
