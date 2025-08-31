@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from refactor.monitoring import get_metrics
 
@@ -25,11 +25,21 @@ async def liveness_check() -> dict[str, str]:
     Returns 200 OK if the application process is alive and responsive.
     This should only fail if the process is completely dead.
     """
+    # Return minimal process info; cast process_id to string for broad monitor compatibility
     return {
         "status": "ok",
         "timestamp": datetime.now(UTC).isoformat(),
-        "process_id": os.getpid(),
+        "process_id": str(os.getpid()),
     }
+
+
+@router.get("/health/up", response_class=PlainTextResponse)
+async def health_up() -> PlainTextResponse:
+    """Ultra‑simple plaintext liveness for external monitors.
+
+    Always returns HTTP 200 with body "ok" when the process is responsive.
+    """
+    return PlainTextResponse("ok")
 
 
 async def _check_core_dependencies() -> dict[str, Any]:
