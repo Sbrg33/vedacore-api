@@ -199,7 +199,7 @@ class ATSSystemAdapter(BaseSystemAdapter):
             scores = normalize_scores(totals, ref=self.ref_norm) or {t: 0.0 for t in targets}
 
             # Convert source planets back to numeric IDs for output
-            by_src_id = {}
+            by_src_id: dict[int, dict[int, float]] = {}
             for target, sources in by_src.items():
                 target_id = ATS_TO_ID.get(target, target)
                 by_src_id[target_id] = {
@@ -207,14 +207,19 @@ class ATSSystemAdapter(BaseSystemAdapter):
                 }
 
             # Convert target scores to use numeric IDs
-            scores_raw_id = {ATS_TO_ID.get(k, k): v for k, v in totals.items()}
-            scores_norm_id = {ATS_TO_ID.get(k, k): v for k, v in scores.items()}
+            scores_raw_id: dict[int, float] = {ATS_TO_ID.get(k, k): v for k, v in totals.items()}
+            scores_norm_id: dict[int, float] = {ATS_TO_ID.get(k, k): v for k, v in scores.items()}
+
+            # Pydantic response model expects string keys; stringify for transport
+            scores_raw_out = {str(k): float(v) for k, v in scores_raw_id.items()}
+            scores_norm_out = {str(k): float(v) for k, v in scores_norm_id.items()}
+            by_source_out = {str(tgt): {str(src): float(val) for src, val in srcs.items()} for tgt, srcs in by_src_id.items()}
 
             return {
                 "timestamp": ts_utc.isoformat(),
-                "scores_raw": scores_raw_id,
-                "scores_norm": scores_norm_id,
-                "by_source": by_src_id,
+                "scores_raw": scores_raw_out,
+                "scores_norm": scores_norm_out,
+                "by_source": by_source_out,
                 "paths": pathlog,
                 "targets": [ATS_TO_ID.get(t, t) for t in targets],
                 "context": os.path.basename(self.context_yaml),
