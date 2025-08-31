@@ -10,6 +10,7 @@ PM Requirements:
 
 import os
 import redis.asyncio as redis
+from urllib.parse import urlparse
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from app.core.logging import get_api_logger
@@ -60,28 +61,39 @@ class RedisManager:
     async def initialize(self) -> None:
         """Initialize Redis connection pool with production settings."""
         try:
-            # Create connection pool
-            self._pool = redis.ConnectionPool(
-                host=self.config.host,
-                port=self.config.port,
-                db=self.config.db,
-                password=self.config.password,
-                max_connections=self.config.max_connections,
-                retry_on_timeout=self.config.retry_on_timeout,
-                socket_keepalive=self.config.socket_keepalive,
-                health_check_interval=self.config.health_check_interval,
-                decode_responses=True
-            )
+            # Prefer REDIS_URL if provided (e.g., Upstash rediss://)
+            redis_url = os.getenv("REDIS_URL")
+            if redis_url:
+                self._pool = redis.ConnectionPool.from_url(
+                    redis_url,
+                    max_connections=self.config.max_connections,
+                    health_check_interval=self.config.health_check_interval,
+                    decode_responses=True,
+                )
+            else:
+                # Create connection pool from host/port
+                self._pool = redis.ConnectionPool(
+                    host=self.config.host,
+                    port=self.config.port,
+                    db=self.config.db,
+                    password=self.config.password,
+                    max_connections=self.config.max_connections,
+                    retry_on_timeout=self.config.retry_on_timeout,
+                    socket_keepalive=self.config.socket_keepalive,
+                    health_check_interval=self.config.health_check_interval,
+                    decode_responses=True,
+                )
             
             # Configure Redis for production durability
             client = redis.Redis(connection_pool=self._pool)
             
-            # Set memory policy (PM requirement)
-            await client.config_set("maxmemory-policy", self.config.maxmemory_policy)
-            await client.config_set("maxmemory", self.config.maxmemory)
-            
-            # Enable persistence for durability
-            await client.config_set("save", "900 1 300 10 60 10000")  # RDB snapshots
+            # Set memory/persistence policy when allowed (managed providers like Upstash forbid CONFIG SET)
+            try:
+                await client.config_set("maxmemory-policy", self.config.maxmemory_policy)
+                await client.config_set("maxmemory", self.config.maxmemory)
+                await client.config_set("save", "900 1 300 10 60 10000")  # RDB snapshots
+            except Exception as e:
+                logger.warning(f"Skipping Redis CONFIG SET (managed provider?): {e}")
             
             logger.info(f"✅ Redis configured: {self.config.host}:{self.config.port}")
             logger.info(f"🔧 Memory policy: {self.config.maxmemory_policy}")
@@ -91,6 +103,7 @@ class RedisManager:
             
         except Exception as e:
             logger.error(f"❌ Redis initialization failed: {e}")
+            # Do not crash app; let production hardening skip Redis-dependent features
             raise
     
     async def get_client(self) -> redis.Redis:

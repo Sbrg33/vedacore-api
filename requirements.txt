@@ -40,6 +40,7 @@ aiofiles==24.1.0  # Async file operations
 # Configuration
 PyYAML==6.0.2
 PyJWT[crypto]==2.9.0
+redis>=5.0.0
 
 # Optional: Cloud storage for log rotation
 boto3==1.35.0  # AWS S3
