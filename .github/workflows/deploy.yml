@@ -49,6 +49,7 @@ jobs:
             docker run -d --rm --name vedacore-api \
               -p ${PORT}:8123 \
               -e ENVIRONMENT=production \
+              -e VC_ENV=remote \
               -e AUTH_JWT_SECRET="${AUTH_JWT_SECRET}" \
               -e CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS}" \
               "$IMAGE"
