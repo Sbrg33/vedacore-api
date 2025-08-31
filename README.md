@@ -38,6 +38,7 @@ Key vars:
 - CORS: `CORS_ALLOWED_ORIGINS=https://app.example,https://admin.example` (no wildcard in prod)
 - Workers/metrics: `WORKERS=4`, `PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus`
 - Feature flags: `FEATURE_V1_ROUTING=true`, `ACTIVATION_ENABLED=false`
+- Optional routing toggles: `ENABLE_ATS=true|false` (ATS endpoints return 403 when disabled)
 
 ## Production Quickstart (Docker)
 

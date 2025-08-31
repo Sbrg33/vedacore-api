@@ -106,6 +106,11 @@ class FeatureFlagState:
         default_factory=lambda: _env_bool("ENABLE_RP_CONFIRM", True)
     )
 
+    # System/Router toggles
+    ENABLE_ATS: bool = field(
+        default_factory=lambda: _env_bool("ENABLE_ATS", True)
+    )
+
     # Advisory tuning
     ADVISORY_TIMEOUT_MS: int = field(
         default_factory=lambda: int(os.getenv("ADVISORY_TIMEOUT_MS", "1000"))
@@ -143,6 +148,8 @@ class FeatureFlagState:
             "ENABLE_PROMISE_CHECK": self.ENABLE_PROMISE_CHECK,
             "ENABLE_DASHA_SYNC": self.ENABLE_DASHA_SYNC,
             "ENABLE_RP_CONFIRM": self.ENABLE_RP_CONFIRM,
+            # System/Router toggles
+            "ENABLE_ATS": self.ENABLE_ATS,
             # Advisory tuning
             "ADVISORY_TIMEOUT_MS": self.ADVISORY_TIMEOUT_MS,
         }
@@ -171,6 +178,7 @@ _STRING_FLAG_MAP: dict[str, str] = {
     "kp_ruling_planets": "ENABLE_KP_RULING_PLANETS",
     "daily_windows": "ENABLE_DAILY_WINDOWS",
     "panchanga_full": "ENABLE_PANCHANGA_FULL",
+    "ats": "ENABLE_ATS",
 }
 
 
@@ -222,4 +230,3 @@ def require_feature(flag: FeatureFlags | str) -> Callable[[Callable[..., Any]], 
         return sync_wrapper
 
     return decorator
-

@@ -47,6 +47,7 @@ from api.routers.ws import router as ws_router
 from app.core.logging import get_api_logger, setup_logging
 from app.core.environment import get_complete_config
 from refactor.monitoring import set_feature_flag, setup_prometheus_metrics
+from config.feature_flags import get_feature_flags
 
 # Initialize structured logging EARLY (before any logger usage)
 setup_logging(
@@ -637,6 +638,7 @@ app.include_router(advisory_router)  # Phase 11: Advisory layers
 app.include_router(tara_router)  # KP: Tara Bala
 app.include_router(fortuna_router)  # KP: Fortuna Points
 app.include_router(transit_events_router)  # Transit Event System
+# Always include ATS router; endpoints gated by feature flag to return 403 when disabled
 app.include_router(ats_router)  # ATS: Aspect-Transfer Scoring
 app.include_router(panchanga_router)  # Panchanga: SystemAdapter registry demo
 app.include_router(kp_horary_router)  # KP: Horary Numbers (1-249)

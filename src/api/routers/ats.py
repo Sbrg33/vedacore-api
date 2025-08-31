@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 ATS API Router - Endpoints for Aspect-Transfer Scoring
-Thin controller layer - validates and dispatches only
-Following VedaCore architectural patterns
+
+Notes:
+- Feature Flag: ENABLE_ATS controls access. When disabled, endpoints return 403.
+- Minimal Mode: The default in-repo ATS implementation provides neutral (zero)
+  scores to keep production startup healthy. Replace with full ATS engine for
+  production scoring when available.
 """
 
 from datetime import datetime
@@ -11,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.services.ats_service import ATSService
+from config.feature_flags import require_feature
 
 # Initialize router following project conventions
 router = APIRouter(prefix="/api/v1/ats", tags=["ATS"])
@@ -66,6 +71,7 @@ class ATSResponse(BaseModel):
 
 
 @router.post("/transit", response_model=ATSResponse)
+@require_feature("ats")
 async def calculate_transit(request: ATSTransitRequest):
     """
     Calculate ATS transit scores for given timestamp
@@ -85,6 +91,7 @@ async def calculate_transit(request: ATSTransitRequest):
 
 
 @router.post("/batch")
+@require_feature("ats")
 async def calculate_batch(request: ATSBatchRequest):
     """
     Calculate ATS scores for a time range
@@ -113,6 +120,7 @@ async def calculate_batch(request: ATSBatchRequest):
 
 
 @router.get("/config")
+@require_feature("ats")
 async def get_config():
     """
     Get current ATS configuration
@@ -126,6 +134,7 @@ async def get_config():
 
 
 @router.get("/validate")
+@require_feature("ats")
 async def validate_scores(
     timestamp: datetime | None = Query(
         default=None, description="UTC timestamp to validate (defaults to current time)"
@@ -143,6 +152,7 @@ async def validate_scores(
 
 
 @router.get("/status")
+@require_feature("ats")
 async def get_status():
     """
     Get ATS system status
@@ -175,12 +185,14 @@ async def get_status():
 
 # Backward compatibility endpoints (will deprecate)
 @router.get("/health")
+@require_feature("ats")
 async def health_check():
     """Check ATS service health (deprecated - use /status)"""
     return await get_status()
 
 
 @router.get("/contexts")
+@require_feature("ats")
 async def list_contexts():
     """List available ATS contexts"""
     import os
