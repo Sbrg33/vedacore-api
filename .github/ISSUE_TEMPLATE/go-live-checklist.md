@@ -36,6 +36,16 @@ Checklist
   - `GET <PUBLIC_URL>/api/v1/health/ready` returns 200
   - `GET <PUBLIC_URL>/api/docs` returns 200/308
   - `GET <PUBLIC_URL>/metrics` returns 200
+  - ATS public endpoint: `curl -sS <PUBLIC_URL>/api/v1/ats/status | jq .status`
+
+- [ ] Deployment version verification
+  - `curl -fsS <PUBLIC_URL>/api/v1/version | jq -r .build_sha` matches deployed `sha-<commit>`
+  - Alt: `curl -fsS <PUBLIC_URL>/api/v1/health/version | jq .`
+
+- [ ] CI gates green for target SHA
+  - Minimal CI succeeded (unit + docker-smoke)
+  - ATS symbol contract tests executed and passed
+  - GHCR Build & Push succeeded for `sha-<commit>`
 
 - [ ] Observability
   - `PROMETHEUS_MULTIPROC_DIR` is writable
@@ -43,7 +53,10 @@ Checklist
 
 - [ ] ATS endpoints (if ENABLE_ATS=true)
   - Status: `curl -sS http://127.0.0.1:8000/api/v1/ats/status | jq .`
-  - Transit (neutral zeros with minimal ATS): `curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit -H 'content-type: application/json' -d '{}'`
+  - Transit (defaults): `curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit -H 'content-type: application/json' -d '{}'`
+  - Transit (3-letter symbols): `curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit -H 'content-type: application/json' -d '{"targets":["VEN","MER"]}'`
+  - Transit (integers): `curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit -H 'content-type: application/json' -d '{"targets":[6,5]}'`
+  - Symbol validation (should 422): `curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit -H 'content-type: application/json' -d '{"targets":["MERC","MOON"]}'`
   - Config: `curl -sS http://127.0.0.1:8000/api/v1/ats/config | jq .`
 
 - [ ] KP Ruling Planets (KP v1)
@@ -57,3 +70,5 @@ Notes
 - Deploy workflow sets: `ENVIRONMENT=production`, `VC_ENV=remote`
 - Use immutable tags (`sha-<commit>`) for rollbacks
 - CORS must list explicit origins with protocol; wildcard is rejected in prod
+- ATS symbol standard: 3-letter tokens (SUN,MOO,JUP,RAH,MER,VEN,KET,SAT,MAR) or integers (1-9)
+- Auto-deploy: Triggers on successful GHCR build for main branch with deterministic SHA tags
