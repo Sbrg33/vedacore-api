@@ -112,6 +112,18 @@ jobs:
             # Stop Apache and nginx to ensure port 80 is available
             systemctl stop apache2 || true
             systemctl stop nginx || true
+            # Configure Docker log rotation and cleanup (persistent)
+            mkdir -p /etc/docker
+            cat > /etc/docker/daemon.json << 'EOF'
+            {
+              "log-driver": "json-file",
+              "log-opts": {
+                "max-size": "10m",
+                "max-file": "3"
+              }
+            }
+            EOF
+            systemctl restart docker || true
             # Pull & restart container directly on port 80 (bypass nginx)
             docker rm -f vedacore-api || true
             docker pull "$IMAGE"

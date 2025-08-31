@@ -71,6 +71,10 @@ ENV ACTIVATION_ENABLED="false"
 # >2GB: 4 workers (high-performance)
 # Override with: -e WORKERS=N (manual control)
 
+# Disk management: Prevent log/cache buildup
+# Application cache directory with cleanup on startup
+ENV VEDACORE_CACHE_DIR="/app/cache"
+
 # Health check configuration for Docker
 # Uses readiness endpoint which validates all critical dependencies
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

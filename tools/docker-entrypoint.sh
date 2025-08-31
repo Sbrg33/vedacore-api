@@ -4,6 +4,12 @@ set -euo pipefail
 # Ensure Prometheus multiprocess dir exists (needed for multi-worker metrics)
 mkdir -p "${PROMETHEUS_MULTIPROC_DIR:-/tmp/prometheus}"
 
+# Cache management: Clean up old cache files on startup (prevent disk buildup)
+if [ -d "${VEDACORE_CACHE_DIR:-/app/cache}" ]; then
+  find "${VEDACORE_CACHE_DIR:-/app/cache}" -type f -mtime +7 -delete 2>/dev/null || true
+  echo "🧹 Cleaned up cache files older than 7 days"
+fi
+
 # Intelligent worker scaling based on available memory and environment
 if [ -z "${WORKERS:-}" ]; then
   # Get total memory in MB (fallback to 1GB if detection fails)

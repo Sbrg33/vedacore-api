@@ -106,6 +106,13 @@ VedaCore automatically detects system memory and optimizes worker count:
 
 Override with `WORKERS` environment variable if needed.
 
+### Disk Space Management
+Automatic disk management prevents space issues:
+- **Docker log rotation**: Max 10MB per log file, 3 files retained
+- **Cache cleanup**: Removes files older than 7 days on startup
+- **Weekly cleanup**: Automated Docker system prune via cron
+- **Disk monitoring**: Alerts at 80%, emergency cleanup at 90%
+
 ### Docker Usage
 ```bash
 # Build production image
