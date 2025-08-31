@@ -211,6 +211,7 @@ async def version_info() -> dict[str, Any]:
         "facade_version": facade_version,
         "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "environment": os.getenv("ENVIRONMENT", "development"),
+        "build_sha": os.getenv("VC_BUILD_SHA", "unknown"),
         "platform": {
             "system": os.uname().sysname if hasattr(os, "uname") else "unknown",
             "machine": os.uname().machine if hasattr(os, "uname") else "unknown",

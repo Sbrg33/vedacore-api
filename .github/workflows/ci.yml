@@ -23,6 +23,12 @@ jobs:
           mkdir -p /tmp/prometheus
         env:
           PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+      - name: Run unit tests
+        run: |
+          PYTHONPATH=./src:. pytest -q tests
+        env:
+          AUTH_JWT_SECRET: dev-secret-for-ci
+          PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
 
   docker-smoke:
     runs-on: ubuntu-latest
