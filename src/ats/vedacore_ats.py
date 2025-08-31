@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Tuple
 import math
+import os
 
 # Canonical ATS planet symbols
 PLANETS: Tuple[str, ...] = (
@@ -50,6 +51,46 @@ def _ang_sep(a: float, b: float) -> float:
     return d if d <= 180.0 else 360.0 - d
 
 
+def _aspect_config_from_env() -> List[Tuple[float, float, float]]:
+    def _f(name: str, default: float) -> float:
+        v = os.getenv(name)
+        try:
+            return float(v) if v is not None else default
+        except Exception:
+            return default
+
+    return [
+        (0.0, _f("ATS_ORB_CONJ", 8.0), _f("ATS_W_CONJ", 1.0)),
+        (180.0, _f("ATS_ORB_OPP", 7.0), _f("ATS_W_OPP", 0.8)),
+        (120.0, _f("ATS_ORB_TRI", 6.0), _f("ATS_W_TRI", 0.7)),
+        (90.0, _f("ATS_ORB_SQR", 6.0), _f("ATS_W_SQR", 0.6)),
+        (60.0, _f("ATS_ORB_SEX", 4.0), _f("ATS_W_SEX", 0.5)),
+    ]
+
+
+def _aspect_config_from_ctx(ctx: Dict[str, Any] | None) -> List[Tuple[float, float, float]]:
+    if not ctx:
+        return []
+    aspects = ctx.get("aspects") or {}
+    if not isinstance(aspects, dict):
+        return []
+    def _entry(key: str, angle: float, default_orb: float, default_w: float) -> Tuple[float, float, float]:
+        cfg = aspects.get(key) or {}
+        orb = cfg.get("orb", default_orb)
+        w = cfg.get("weight", default_w)
+        try:
+            return angle, float(orb), float(w)
+        except Exception:
+            return angle, default_orb, default_w
+    return [
+        _entry("conj", 0.0, 8.0, 1.0),
+        _entry("opp", 180.0, 7.0, 0.8),
+        _entry("tri", 120.0, 6.0, 0.7),
+        _entry("sqr", 90.0, 6.0, 0.6),
+        _entry("sex", 60.0, 4.0, 0.5),
+    ]
+
+
 def build_edges_transit(
     planets: Iterable[str],
     longs: Dict[str, float],
@@ -71,7 +112,7 @@ def build_edges_transit(
         return []
     planets = list(planets)
     edges: List[Tuple[str, str, float]] = []
-    aspects = [
+    aspects = _aspect_config_from_ctx(ctx) or _aspect_config_from_env() or [
         (0.0, 8.0, 1.0),
         (180.0, 7.0, 0.8),
         (120.0, 6.0, 0.7),
@@ -103,12 +144,39 @@ def build_edges_transit(
     return edges
 
 
+def _kp_emphasis_from_env() -> Tuple[float, float, float]:
+    def _f(name: str, default: float) -> float:
+        v = os.getenv(name)
+        try:
+            return float(v) if v is not None else default
+        except Exception:
+            return default
+    return (
+        _f("ATS_KP_NL", 1.0),
+        _f("ATS_KP_SL", 1.0),
+        _f("ATS_KP_SSL", 1.0),
+    )
+
+
+def _kp_emphasis_from_ctx(ctx: Dict[str, Any] | None) -> Tuple[float, float, float]:
+    if not ctx:
+        return (1.0, 1.0, 1.0)
+    ke = ctx.get("kp_emphasis") or {}
+    def _g(k: str, d: float) -> float:
+        try:
+            return float(ke.get(k, d))
+        except Exception:
+            return d
+    return (_g("nl", 1.0), _g("sl", 1.0), _g("ssl", 1.0))
+
+
 def score_targets(
     targets: Iterable[str],
     planets: Iterable[str],
     edges: List[Tuple[str, str, float]],
     *,
     ctx: Dict[str, Any],
+    kp: KPState | None = None,
 ) -> Tuple[Dict[str, float], Dict[str, Dict[str, float]], List[dict]]:
     """Score target planets based on edges.
 
@@ -119,14 +187,38 @@ def score_targets(
     by_source: Dict[str, Dict[str, float]] = {t: {} for t in tset}
     pathlog: List[dict] = []
 
+    # KP emphasis factors
+    kp_nl_w, kp_sl_w, kp_ssl_w = _kp_emphasis_from_ctx(ctx)
+    env_nl_w, env_sl_w, env_ssl_w = _kp_emphasis_from_env()
+    kp_nl_w = kp_nl_w if kp_nl_w is not None else 1.0
+    kp_sl_w = kp_sl_w if kp_sl_w is not None else 1.0
+    kp_ssl_w = kp_ssl_w if kp_ssl_w is not None else 1.0
+    # Env overrides multiply
+    kp_nl_w *= env_nl_w
+    kp_sl_w *= env_sl_w
+    kp_ssl_w *= env_ssl_w
+
+    nl = getattr(kp, "moon_nl", None) if kp else None
+    sl = getattr(kp, "moon_sl", None) if kp else None
+    ssl = getattr(kp, "moon_ssl", None) if kp else None
+
     for src, dst, w in edges or []:
         if dst not in totals:
             continue
-        totals[dst] += float(w)
-        by_source[dst][src] = by_source[dst].get(src, 0.0) + float(w)
+        mult = 1.0
+        if kp:
+            if dst == nl:
+                mult *= kp_nl_w
+            elif dst == sl:
+                mult *= kp_sl_w
+            elif dst == ssl:
+                mult *= kp_ssl_w
+        val = float(w) * mult
+        totals[dst] += val
+        by_source[dst][src] = by_source[dst].get(src, 0.0) + val
         # Keep a small pathlog for explainability
         if len(pathlog) < 200:
-            pathlog.append({"from": src, "to": dst, "weight": round(float(w), 4)})
+            pathlog.append({"from": src, "to": dst, "weight": round(val, 4)})
     return totals, by_source, pathlog
 
 

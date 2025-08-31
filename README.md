@@ -196,6 +196,37 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit \
 curl -sS http://127.0.0.1:8000/api/v1/ats/config | jq .
 ```
 
+### ATS Scoring Model & Tuning
+
+- Aspects considered: conjunction (0°), opposition (180°), trine (120°), square (90°), sextile (60°)
+- Default orbs/weights (base): 8/1.0, 7/0.8, 6/0.7, 6/0.6, 4/0.5
+- Condition factor: retrograde sources are scaled by 0.9
+- KP emphasis: edges into Moon’s NL/SL/SSL can be up-weighted
+
+Configure via env:
+```bash
+# Orbs
+export ATS_ORB_CONJ=8 ATS_ORB_OPP=7 ATS_ORB_TRI=6 ATS_ORB_SQR=6 ATS_ORB_SEX=4
+# Base weights
+export ATS_W_CONJ=1.0 ATS_W_OPP=0.8 ATS_W_TRI=0.7 ATS_W_SQR=0.6 ATS_W_SEX=0.5
+# KP emphasis multipliers (destination planets)
+export ATS_KP_NL=1.2 ATS_KP_SL=1.1 ATS_KP_SSL=1.05
+```
+
+Or via ATS context YAML (loaded from `config/ats/ats_market.yaml`):
+```yaml
+aspects:
+  conj: { orb: 8.0, weight: 1.0 }
+  opp:  { orb: 7.0, weight: 0.8 }
+  tri:  { orb: 6.0, weight: 0.7 }
+  sqr:  { orb: 6.0, weight: 0.6 }
+  sex:  { orb: 4.0, weight: 0.5 }
+kp_emphasis:
+  nl: 1.2
+  sl: 1.1
+  ssl: 1.05
+```
+
 - Readiness 503: missing auth (`AUTH_JWT_SECRET`/`AUTH_JWKS_URL`) or CORS misconfig in prod.
 - CORS errors: ensure comma-separated origins with `http(s)://` prefix; no wildcard in prod.
 - 401 on streaming: validate token and `AUTH_AUDIENCE`/`AUTH_ISSUER`.
