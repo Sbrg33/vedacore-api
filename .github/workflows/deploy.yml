@@ -16,6 +16,10 @@ on:
         description: "Target environment (production|staging)"
         default: "production"
         required: false
+      verify_symbols:
+        description: "Run ATS symbol contract checks (true|false)"
+        default: "true"
+        required: false
   # Auto-deploy when build & push succeeds on main
   workflow_run:
     workflows: ["Build & Push Image (GHCR)"]
@@ -144,25 +148,29 @@ jobs:
             exit 1
           fi
 
-          echo "🔍 ATS symbols acceptance: [\"VEN\",\"MER\"] (should be 200)"
-          if curl -fsS -X POST "$PUBLIC_URL/api/v1/ats/transit" \
-               -H 'accept: application/json' -H 'content-type: application/json' \
-               -d '{"targets":["VEN","MER"]}' >/dev/null; then
-            echo "✅ ATS symbols accepted"
-          else
-            echo "❌ ATS symbols not accepted"
-            exit 1
-          fi
+          if [ "${{ inputs.verify_symbols || 'true' }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "🔍 ATS symbols acceptance: [\"VEN\",\"MER\"] (should be 200)"
+            if curl -fsS -X POST "$PUBLIC_URL/api/v1/ats/transit" \
+                 -H 'accept: application/json' -H 'content-type: application/json' \
+                 -d '{"targets":["VEN","MER"]}' >/dev/null; then
+              echo "✅ ATS symbols accepted"
+            else
+              echo "❌ ATS symbols not accepted"
+              exit 1
+            fi
 
-          echo "🔍 ATS old tokens rejection: [\"MERC\",\"MOON\"] (should be 422)"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$PUBLIC_URL/api/v1/ats/transit" \
-               -H 'accept: application/json' -H 'content-type: application/json' \
-               -d '{"targets":["MERC","MOON"]}')
-          if [ "$STATUS" = "422" ]; then
-            echo "✅ Old tokens correctly rejected (422)"
+            echo "🔍 ATS old tokens rejection: [\"MERC\",\"MOON\"] (should be 422)"
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$PUBLIC_URL/api/v1/ats/transit" \
+                 -H 'accept: application/json' -H 'content-type: application/json' \
+                 -d '{"targets":["MERC","MOON"]}')
+            if [ "$STATUS" = "422" ]; then
+              echo "✅ Old tokens correctly rejected (422)"
+            else
+              echo "❌ Expected 422 for old tokens, got $STATUS"
+              exit 1
+            fi
           else
-            echo "❌ Expected 422 for old tokens, got $STATUS"
-            exit 1
+            echo "ℹ️ Skipping ATS symbol contract checks (verify_symbols=false)"
           fi
           
           echo "✅ Post-deploy public smoke tests completed successfully"

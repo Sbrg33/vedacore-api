@@ -1,5 +1,5 @@
 # Multi-stage build for KP Ephemeris API
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -42,7 +42,7 @@ WORKDIR /app
 COPY --chown=ephemeris:ephemeris . .
 
 # Set Python path for target monorepo structure
-ENV PYTHONPATH="/app/src:/app:$PYTHONPATH"
+ENV PYTHONPATH="/app/src:/app"
 ENV PYTHONUNBUFFERED=1
 
 # Switch to non-root user
