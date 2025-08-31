@@ -1,6 +1,9 @@
 # Minimal Makefile for vedacore-api
 
-.PHONY: install run test smoke-local docker-build docker-run docker-stop docker-logs docker-smoke
+.PHONY: install run test smoke-local docker-build docker-run docker-stop docker-logs docker-smoke check-health
+
+# Base URL for check-health (override: make check-health BASE=https://api.vedacore.io)
+BASE ?= http://127.0.0.1:8000
 
 install:
 	python -m pip install --upgrade pip
@@ -49,3 +52,7 @@ docker-smoke: docker-stop docker-build docker-run
 	 if [ $$ok -eq 1 ]; then echo "✅ Ready"; else echo "❌ Not ready"; docker logs vedacore-api || true; fi; \
 	 $(MAKE) docker-stop; \
 	 test $$ok -eq 1
+
+# Portable API health check (prefers /health/up, fallback /health/ready)
+check-health:
+	PYTHONPATH=./src:. python tools/check_api_health.py --base $(BASE) --json
