@@ -42,7 +42,7 @@ jobs:
       cancel-in-progress: true
     env:
       APP_DIR: /opt/vedacore-api
-      PORT: 8000
+      PORT: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging') && '8000' || '80' }}
     steps:
       - name: Compute image tag
         id: tag
