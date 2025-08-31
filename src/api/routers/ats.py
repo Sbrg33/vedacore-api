@@ -57,7 +57,7 @@ class ATSTransitRequest(BaseModel):
         default=None,
         description="UTC timestamp for calculation (defaults to current time)",
     )
-    targets: list[int] | None = Field(
+    targets: list[int | str] | None = Field(
         default=None,
         description="List of target planet IDs (1-9). Defaults to [6, 5] (Venus, Mercury)",
     )
@@ -92,7 +92,7 @@ class ATSBatchRequest(BaseModel):
     interval_minutes: int = Field(
         default=1, ge=1, le=60, description="Interval between calculations in minutes"
     )
-    targets: list[int] | None = Field(
+    targets: list[int | str] | None = Field(
         default=None, description="List of target planet IDs (1-9)"
     )
 
