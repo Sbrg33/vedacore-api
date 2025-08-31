@@ -118,7 +118,14 @@ except Exception:
     pass
 
 
-def get_ruling_planets_data(*, timestamp, latitude: float, longitude: float, include_day_lord: bool = True) -> Mapping[str, Any]:
+def get_ruling_planets_data(
+    *,
+    timestamp,
+    latitude: float,
+    longitude: float,
+    include_day_lord: bool = True,
+    weights: Mapping[str, Any] | None = None,
+) -> Mapping[str, Any]:
     """Convenience function used by API v1 to compute RP data.
 
     Uses minimal fallback if full RP implementation is not available.
@@ -136,7 +143,14 @@ def get_ruling_planets_data(*, timestamp, latitude: float, longitude: float, inc
     if _RP_AVAILABLE:
         # Prefer clients to supply asc/moon chains; for simplicity, use Moon chain only
         ctx = {"weekday_idx": wd, "asc_chain": ("MO", "MO", "MO"), "moon_chain": ("MO", "MO", "MO")}
-        out = ruling_planets(wd, ctx["asc_chain"], ctx["moon_chain"], {}, {}, RPConfig())
+        # Build config from env and override with request weights
+        from refactor.kp_ruling_planets import RPConfig as _RPConf
+        cfg = _RPConf.from_env()
+        if weights:
+            cfg = _RPConf.from_mapping({**cfg.__dict__, **weights})
+        if not include_day_lord:
+            cfg = _RPConf.from_mapping({**cfg.__dict__, "day_lord": 0.0})
+        out = ruling_planets(wd, ctx["asc_chain"], ctx["moon_chain"], {}, {}, cfg)
         out.update({"weekday_idx": wd})
         return out
     else:

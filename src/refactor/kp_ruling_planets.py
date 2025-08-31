@@ -57,6 +57,88 @@ class RPConfig:
     normalize: bool = True
     top_k_primary: int = 5
 
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object] | None) -> "RPConfig":
+        if not data:
+            return cls()
+        # Accept both short and long keys
+        keymap = {
+            "w_day_lord": "w_day_lord",
+            "day_lord": "w_day_lord",
+            "w_asc_nl": "w_asc_nl",
+            "asc_nl": "w_asc_nl",
+            "w_asc_sl": "w_asc_sl",
+            "asc_sl": "w_asc_sl",
+            "w_asc_ssl": "w_asc_ssl",
+            "asc_ssl": "w_asc_ssl",
+            "w_moon_nl": "w_moon_nl",
+            "moon_nl": "w_moon_nl",
+            "w_moon_sl": "w_moon_sl",
+            "moon_sl": "w_moon_sl",
+            "w_moon_ssl": "w_moon_ssl",
+            "moon_ssl": "w_moon_ssl",
+            "w_exalt": "w_exalt",
+            "exalt": "w_exalt",
+            "w_own": "w_own",
+            "own": "w_own",
+            "normalize": "normalize",
+            "top_k_primary": "top_k_primary",
+        }
+        kwargs: dict = {}
+        for k, v in (data or {}).items():
+            mk = keymap.get(str(k), None)
+            if mk is None:
+                continue
+            if mk in {"normalize"}:
+                kwargs[mk] = bool(v)
+            elif mk in {"top_k_primary"}:
+                try:
+                    kwargs[mk] = int(v)  # type: ignore[assignment]
+                except Exception:
+                    pass
+            else:
+                try:
+                    kwargs[mk] = float(v)  # type: ignore[assignment]
+                except Exception:
+                    pass
+        return cls(**kwargs)
+
+    @classmethod
+    def from_env(cls, prefix: str = "RP_") -> "RPConfig":
+        import os
+        env_map = {}
+        for name in (
+            "W_DAY_LORD",
+            "W_ASC_NL",
+            "W_ASC_SL",
+            "W_ASC_SSL",
+            "W_MOON_NL",
+            "W_MOON_SL",
+            "W_MOON_SSL",
+            "W_EXALT",
+            "W_OWN",
+            "NORMALIZE",
+            "TOP_K_PRIMARY",
+        ):
+            val = os.getenv(prefix + name)
+            if val is not None:
+                env_map[name.lower()] = val
+        # Map env keys (lower) to mapping keys expected by from_mapping
+        mapping = {
+            "w_day_lord": env_map.get("w_day_lord"),
+            "w_asc_nl": env_map.get("w_asc_nl"),
+            "w_asc_sl": env_map.get("w_asc_sl"),
+            "w_asc_ssl": env_map.get("w_asc_ssl"),
+            "w_moon_nl": env_map.get("w_moon_nl"),
+            "w_moon_sl": env_map.get("w_moon_sl"),
+            "w_moon_ssl": env_map.get("w_moon_ssl"),
+            "w_exalt": env_map.get("w_exalt"),
+            "w_own": env_map.get("w_own"),
+            "normalize": env_map.get("normalize"),
+            "top_k_primary": env_map.get("top_k_primary"),
+        }
+        return cls.from_mapping(mapping)
+
 
 def _init_score_map(planets: Iterable[PlanetCode] = ALL_PLANETS) -> Dict[PlanetCode, float]:
     return {p: 0.0 for p in planets}

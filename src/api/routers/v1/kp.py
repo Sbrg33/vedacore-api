@@ -36,9 +36,28 @@ class ChainRequest(BaseKPRequest):
         id: str = Field(..., description="Planet name or cusp number")
 
 
+class RPWeights(BaseModel):
+    """Optional custom weights for RP calculation.
+
+    All values are floats; omit to use defaults.
+    """
+    day_lord: float | None = Field(default=None, description="Weight for day lord component")
+    asc_nl: float | None = Field(default=None, description="Weight for ascendant NL")
+    asc_sl: float | None = Field(default=None, description="Weight for ascendant SL")
+    asc_ssl: float | None = Field(default=None, description="Weight for ascendant SSL")
+    moon_nl: float | None = Field(default=None, description="Weight for moon NL")
+    moon_sl: float | None = Field(default=None, description="Weight for moon SL")
+    moon_ssl: float | None = Field(default=None, description="Weight for moon SSL")
+    exalt: float | None = Field(default=None, description="Bonus for exaltation")
+    own: float | None = Field(default=None, description="Bonus for own sign")
+    normalize: bool | None = Field(default=None, description="Normalize scores to 0-100")
+    top_k_primary: int | None = Field(default=None, ge=1, le=9, description="Number of primary RP to return")
+
+
 class RulingPlanetsRequest(BaseKPRequest):
     """Request for KP Ruling Planets calculation."""
     include_day_lord: bool = Field(default=True, description="Include day lord analysis")
+    weights: RPWeights | None = Field(default=None, description="Custom weights (optional)")
 
 
 class HoraryRequest(BaseModel):
@@ -191,11 +210,17 @@ async def calculate_ruling_planets(request: RulingPlanetsRequest) -> BaseRespons
         # Import KP ruling planets
         from interfaces.kp_ruling_planets_adapter import get_ruling_planets_data
         
+        # Merge weight overrides with include_day_lord toggle
+        overrides = (request.weights.dict(exclude_none=True) if request.weights else {})
+        if not request.include_day_lord:
+            overrides.setdefault("day_lord", 0.0)
+
         rp_data = get_ruling_planets_data(
             timestamp=request.datetime,
             latitude=request.lat,
             longitude=request.lon,
-            include_day_lord=request.include_day_lord
+            include_day_lord=request.include_day_lord,
+            weights=overrides if overrides else None
         )
         
         return BaseResponse.create(
