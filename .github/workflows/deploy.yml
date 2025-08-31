@@ -109,7 +109,8 @@ jobs:
               sudo ufw --force enable || true; \
               sudo ufw reload || true; \
             fi
-            # Stop nginx temporarily to test direct container access
+            # Stop Apache and nginx to ensure port 80 is available
+            systemctl stop apache2 || true
             systemctl stop nginx || true
             # Pull & restart container directly on port 80 (bypass nginx)
             docker rm -f vedacore-api || true

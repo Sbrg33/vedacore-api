@@ -2,9 +2,12 @@
 FROM python:3.11-slim AS builder
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends \
+       gcc \
+       g++ \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -27,8 +30,11 @@ ARG VC_BUILD_SHA=unknown
 ENV VC_BUILD_SHA=${VC_BUILD_SHA}
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends \
+       curl \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -47,6 +53,8 @@ COPY --chown=ephemeris:ephemeris . .
 
 # Set Python path for target monorepo structure
 ENV PYTHONPATH="/app/src:/app"
+# Default service port (can be overridden)
+ENV PORT=8000
 ENV PYTHONUNBUFFERED=1
 
 # Switch to non-root user
@@ -60,11 +68,13 @@ ENV ACTIVATION_ENABLED="false"
 # Health check configuration for Docker
 # Uses readiness endpoint which validates all critical dependencies
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/v1/health/ready -H "Accept: application/json" | \
-        grep -q '"status":"ready"' || exit 1
+    CMD ["sh","-c","curl -fsS http://localhost:${PORT}/api/v1/health/ready -H 'Accept: application/json' | grep -q '\"status\":\"ready\"'"]
 
 # Expose port
+# Expose default app port; host mapping handled at runtime (-p 80:8000 for prod)
 EXPOSE 8000
+# Optionally expose 80 for documentation; container still listens on $PORT
+EXPOSE 80
 
 # Entrypoint ensures runtime dirs exist, then launches uvicorn
 COPY --chown=ephemeris:ephemeris tools/docker-entrypoint.sh /app/tools/docker-entrypoint.sh
