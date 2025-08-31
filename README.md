@@ -68,6 +68,9 @@ CORS rules:
 
 - Workflow: `.github/workflows/deploy.yml`
 - Required secrets: `DO_HOST`, `DO_USER`, `DO_SSH_KEY`, `GHCR_USERNAME`, `GHCR_TOKEN`, `AUTH_JWT_SECRET`, `CORS_ALLOWED_ORIGINS`, optional `REDIS_URL`
+- Environment-specific secrets:
+  - Production environment: define `REDIS_URL`
+  - Staging environment: define `REDIS_URL` (preferred) or `STAGING_REDIS_URL` (fallback)
 - Auto‑deploy: when "Build & Push Image (GHCR)" succeeds on `main`, the deploy workflow auto‑runs and deploys the exact image tagged `sha-<long-commit>`
 - Concurrency: deploys are serialized (`deploy-vedacore-api` group) to prevent overlap
 - Environments: deploy job uses GitHub Environments (production by default; staging available via manual input)

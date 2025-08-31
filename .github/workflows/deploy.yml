@@ -49,7 +49,22 @@ jobs:
           else
             echo "tag=${{ inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
           fi
-          echo "Computed tag: $(cat $GITHUB_OUTPUT)"
+
+      - name: Resolve REDIS_URL secret
+        id: redis
+        env:
+          ENV_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || '' }}
+          REDIS_URL_PROD: ${{ secrets.REDIS_URL }}
+          REDIS_URL_STAGING: ${{ secrets.STAGING_REDIS_URL }}
+        run: |
+          set -euo pipefail
+          URL="${REDIS_URL_PROD:-}"
+          if [ "${ENV_INPUT:-}" = "staging" ]; then
+            if [ -n "${REDIS_URL_STAGING:-}" ]; then
+              URL="${REDIS_URL_STAGING}"
+            fi
+          fi
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
       - name: Deploy on server (pull image)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -64,7 +79,7 @@ jobs:
           CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_URL: ${{ steps.redis.outputs.url }}
           script: |
             set -euo pipefail
             IMAGE="ghcr.io/${{ github.repository_owner }}/vedacore-api:${{ steps.tag.outputs.tag }}"
