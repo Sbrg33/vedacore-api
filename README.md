@@ -102,6 +102,18 @@ Notes:
 - Multi-worker metrics use `PROMETHEUS_MULTIPROC_DIR` (default `/tmp/prometheus`).
 - Internal metrics helpers are wired via `refactor.monitoring`.
 
+Quick checks:
+```bash
+# Readiness (used in CI)
+curl -fsS http://127.0.0.1:8000/api/v1/health/ready
+
+# Docs (OpenAPI UI)
+curl -fsS http://127.0.0.1:8000/api/docs >/dev/null && echo OK
+
+# Metrics endpoint
+curl -fsS http://127.0.0.1:8000/metrics | head -n 10
+```
+
 ## Testing
 
 - Run: `make test` or `PYTHONPATH=./src:. pytest -v`
@@ -156,6 +168,33 @@ export RP_W_DAY_LORD=2.0 RP_W_ASC_NL=3.0 RP_W_MOON_NL=1.5 \
 ```
 
 ## Troubleshooting
+
+## ATS Endpoints (Feature-Flagged)
+
+- Feature flag: set `ENABLE_ATS=true` to enable ATS routes (default: true unless overridden). When disabled, endpoints return 403.
+- Enable in Docker run:
+```bash
+docker run -d --rm --name vedacore-api -p 8000:8000 \
+  -e ENVIRONMENT=production \
+  -e VC_ENV=remote \
+  -e ENABLE_ATS=true \
+  -e AUTH_JWT_SECRET='your-long-secret' \
+  -e CORS_ALLOWED_ORIGINS='https://your-frontend.example' \
+  ghcr.io/$OWNER/vedacore-api:latest
+```
+
+- Quick curl examples (replace timestamp if desired):
+```bash
+# Status (returns healthy + context when enabled; 403 when disabled)
+curl -sS http://127.0.0.1:8000/api/v1/ats/status | jq .
+
+# Transit scores (neutral zeros with minimal ATS layer)
+curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit \
+  -H 'content-type: application/json' -d '{}'
+
+# Config dump
+curl -sS http://127.0.0.1:8000/api/v1/ats/config | jq .
+```
 
 - Readiness 503: missing auth (`AUTH_JWT_SECRET`/`AUTH_JWKS_URL`) or CORS misconfig in prod.
 - CORS errors: ensure comma-separated origins with `http(s)://` prefix; no wildcard in prod.
