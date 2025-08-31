@@ -191,9 +191,12 @@ class ATSSystemAdapter(BaseSystemAdapter):
             )
 
             # Calculate ATS scores using original core functions
-            edges = build_edges_transit(PLANETS, longs, dign, conds, kp=kp, ctx=ctx)
-            totals, by_src, pathlog = score_targets(targets, PLANETS, edges, ctx=ctx)
-            scores = normalize_scores(totals, ref=self.ref_norm)
+            edges = build_edges_transit(PLANETS, longs, dign, conds, kp=kp, ctx=ctx or {}) or []
+            totals, by_src, pathlog = score_targets(targets, PLANETS, edges, ctx=ctx or {})
+            totals = totals or {t: 0.0 for t in targets}
+            by_src = by_src or {t: {} for t in targets}
+            pathlog = pathlog or []
+            scores = normalize_scores(totals, ref=self.ref_norm) or {t: 0.0 for t in targets}
 
             # Convert source planets back to numeric IDs for output
             by_src_id = {}
