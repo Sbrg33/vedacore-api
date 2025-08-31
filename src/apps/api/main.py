@@ -519,7 +519,7 @@ def _handle_cors_fallback(allowed_origins, env):
                 "http://localhost:8000",
                 "http://localhost:8080",
                 "http://localhost:8083",
-                "http://localhost:8123",
+                "http://localhost:8000",
             ]
             logger.warning("🔧 DEVELOPMENT: Using default localhost CORS origins")
             logger.warning("   Set CORS_ALLOWED_ORIGINS for production deployment")

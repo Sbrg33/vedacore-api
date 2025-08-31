@@ -10,7 +10,7 @@ Production-ready FastAPI service for high-precision KP astrology calculations.
 ## Local Dev Quickstart
 
 - Install: `make install`
-- Run API (reload): `make run` (uvicorn on `http://127.0.0.1:8123`)
+- Run API (reload): `make run` (uvicorn on `http://127.0.0.1:8000`)
 - Tests: `make test` (or `PYTHONPATH=./src:. pytest -v`)
 - Smoke: `make smoke-local` (start → readiness gate → stop)
 
@@ -18,7 +18,7 @@ Direct commands:
 ```bash
 pip install -r requirements.txt
 export PYTHONPATH=./src:.
-uvicorn apps.api.main:app --reload --port 8123
+uvicorn apps.api.main:app --reload --port 8000
 ```
 
 ## Environment Model
@@ -44,7 +44,7 @@ Key vars:
 
 ```bash
 docker build -t vedacore-api .
-docker run -d --rm --name vedacore-api -p 8123:8123 \
+docker run -d --rm --name vedacore-api -p 8000:8000 \
   -e ENVIRONMENT=production \
   -e VC_ENV=remote \
   -e AUTH_JWT_SECRET='your-long-secret' \
@@ -54,7 +54,7 @@ docker run -d --rm --name vedacore-api -p 8123:8123 \
 
 Health gate:
 ```bash
-curl -fsS http://localhost:8123/api/v1/health/ready || docker logs --tail 200 vedacore-api
+curl -fsS http://localhost:8000/api/v1/health/ready || docker logs --tail 200 vedacore-api
 ```
 
 Auth options:
@@ -83,14 +83,14 @@ docker login ghcr.io -u <GHCR_USERNAME> -p <GHCR_TOKEN>
 docker pull ghcr.io/$OWNER/vedacore-api:latest
 
 docker rm -f vedacore-api || true
-docker run -d --rm --name vedacore-api -p 8123:8123 \
+docker run -d --rm --name vedacore-api -p 8000:8000 \
   -e ENVIRONMENT=production \
   -e VC_ENV=remote \
   -e AUTH_JWT_SECRET='<32+ char random>' \
   -e CORS_ALLOWED_ORIGINS='https://your-frontend.example' \
   ghcr.io/$OWNER/vedacore-api:latest
 
-curl -fsS http://127.0.0.1:8123/api/v1/health/ready
+curl -fsS http://127.0.0.1:8000/api/v1/health/ready
 ```
 
 Notes:

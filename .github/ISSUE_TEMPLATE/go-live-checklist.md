@@ -27,7 +27,7 @@ Checklist
   - Input `tag`: `sha-<commit>`
 
 - [ ] Server readiness
-  - `curl -fsS http://127.0.0.1:8123/api/v1/health/ready`
+  - `curl -fsS http://127.0.0.1:8000/api/v1/health/ready`
   - `docker logs vedacore-api` (if not ready)
 
 - [ ] Public smoke
@@ -44,4 +44,3 @@ Notes
 - Deploy workflow sets: `ENVIRONMENT=production`, `VC_ENV=remote`
 - Use immutable tags (`sha-<commit>`) for rollbacks
 - CORS must list explicit origins with protocol; wildcard is rejected in prod
-
