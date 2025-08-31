@@ -67,14 +67,22 @@ CORS rules:
 ## CI/CD Deploy (SSH)
 
 - Workflow: `.github/workflows/deploy.yml`
-- Required secrets: `DO_HOST`, `DO_USER`, `DO_SSH_KEY`, `GHCR_USERNAME`, `GHCR_TOKEN`, `AUTH_JWT_SECRET`, `CORS_ALLOWED_ORIGINS`
-- Trigger: GitHub → Actions → Deploy (SSH via GHCR) → Run workflow
+- Required secrets: `DO_HOST`, `DO_USER`, `DO_SSH_KEY`, `GHCR_USERNAME`, `GHCR_TOKEN`, `AUTH_JWT_SECRET`, `CORS_ALLOWED_ORIGINS`, optional `REDIS_URL`
+- Auto‑deploy: when "Build & Push Image (GHCR)" succeeds on `main`, the deploy workflow auto‑runs and deploys the exact image tagged `sha-<long-commit>`
+- Concurrency: deploys are serialized (`deploy-vedacore-api` group) to prevent overlap
+- Manual deploy (override or rollback):
+  - GitHub UI: Actions → Deploy (SSH via GHCR) → Run workflow
+  - CLI example (deploy specific image):
+    - `gh workflow run "Deploy (SSH via GHCR)" -F tag=sha-<long-commit>`
+  - Rollback: re‑deploy a previous known good SHA with the same command
 
 ## GHCR Deploy
 
 Images are published to GHCR via CI:
 - Registry: `ghcr.io/$OWNER/vedacore-api`
-- Tags: `sha-<commit>`; `latest` only on main; release tags as created
+- Tags: `sha-<commit>` (short and long), `latest` on `main`, plus release tags as created
+
+Auto‑deploy uses the long SHA tag for deterministic server updates.
 
 Run on a server:
 ```bash
