@@ -98,17 +98,31 @@ Production environment (`ENVIRONMENT=production`) enforces:
 
 ## Docker & Deployment
 
+### Memory-Optimized Worker Scaling
+VedaCore automatically detects system memory and optimizes worker count:
+- **≤1GB RAM**: 1 worker (optimal for small droplets like DO Basic)
+- **≤2GB RAM**: 2 workers (balanced performance) 
+- **>2GB RAM**: 4 workers (high-performance)
+
+Override with `WORKERS` environment variable if needed.
+
 ### Docker Usage
 ```bash
 # Build production image
 docker build -t vedacore-api .
 
-# Run with production settings
+# Run with production settings (auto-scales workers based on system memory)
 docker run -d --name vedacore-api -p 8000:8000 \
   -e ENVIRONMENT=production \
   -e VC_ENV=remote \
   -e AUTH_JWT_SECRET='your-secret-32-chars' \
   -e CORS_ALLOWED_ORIGINS='https://your-app.com' \
+  vedacore-api
+
+# Manual worker override (if needed)
+docker run -d --name vedacore-api -p 8000:8000 \
+  -e WORKERS=1 \
+  -e ENVIRONMENT=production \
   vedacore-api
 ```
 

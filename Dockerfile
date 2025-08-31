@@ -65,6 +65,12 @@ ENV PROMETHEUS_MULTIPROC_DIR="/tmp/prometheus"
 ENV LOG_LEVEL="INFO"
 ENV ACTIVATION_ENABLED="false"
 
+# Worker scaling: Auto-detects system memory and sets optimal worker count
+# ≤1GB: 1 worker (memory-optimized for small droplets)
+# ≤2GB: 2 workers (balanced performance)  
+# >2GB: 4 workers (high-performance)
+# Override with: -e WORKERS=N (manual control)
+
 # Health check configuration for Docker
 # Uses readiness endpoint which validates all critical dependencies
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
