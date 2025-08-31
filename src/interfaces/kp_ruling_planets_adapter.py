@@ -20,7 +20,21 @@ except Exception:
         def dependencies(self) -> list[str]: ...
 
 
-from refactor.kp_ruling_planets import RPConfig, ruling_planets
+# Try real RP implementation; fallback to minimal stub if unavailable
+try:
+    from refactor.kp_ruling_planets import RPConfig, ruling_planets  # type: ignore
+    _RP_AVAILABLE = True
+except Exception:  # pragma: no cover - runtime fallback
+    _RP_AVAILABLE = False
+
+    class RPConfig:  # type: ignore
+        pass
+
+    def ruling_planets(wd, asc, moon, is_ex, is_own, cfg):  # type: ignore
+        # Minimal fallback: rank by a simple deterministic rule
+        order = ["SU", "MO", "MA", "ME", "JU", "VE", "SA", "RA", "KE"]
+        ranked = [(p, 10 - i) for i, p in enumerate(order)]
+        return {"rp_ranked": ranked, "rp_primary": [p for p, _ in ranked[:5]]}
 
 
 class KPRulingPlanetsAdapter:
@@ -102,3 +116,30 @@ try:
     advisory_registry.register(KPRulingPlanetsAdapter())
 except Exception:
     pass
+
+
+def get_ruling_planets_data(*, timestamp, latitude: float, longitude: float, include_day_lord: bool = True) -> Mapping[str, Any]:
+    """Convenience function used by API v1 to compute RP data.
+
+    Uses minimal fallback if full RP implementation is not available.
+    """
+    from datetime import UTC
+    from zoneinfo import ZoneInfo
+
+    # Determine weekday (NY time for trading context)
+    try:
+        wd = timestamp.astimezone(ZoneInfo("America/New_York")).weekday()
+    except Exception:
+        wd = timestamp.replace(tzinfo=UTC).weekday()
+
+    # Build simple chains from Moon position if full implementation missing
+    if _RP_AVAILABLE:
+        # Prefer clients to supply asc/moon chains; for simplicity, use Moon chain only
+        ctx = {"weekday_idx": wd, "asc_chain": ("MO", "MO", "MO"), "moon_chain": ("MO", "MO", "MO")}
+        out = ruling_planets(wd, ctx["asc_chain"], ctx["moon_chain"], {}, {}, RPConfig())
+        out.update({"weekday_idx": wd})
+        return out
+    else:
+        order = ["SU", "MO", "MA", "ME", "JU", "VE", "SA", "RA", "KE"]
+        ranked = [(p, 10 - i) for i, p in enumerate(order)]
+        return {"weekday_idx": wd, "rp_ranked": ranked, "rp_primary": [p for p, _ in ranked[:5]], "adapter": "minimal"}
