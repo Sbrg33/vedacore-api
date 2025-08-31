@@ -12,7 +12,7 @@ Notes:
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.services.ats_service import ATSService
 from config.feature_flags import require_feature
@@ -22,6 +22,32 @@ router = APIRouter(prefix="/api/v1/ats", tags=["ATS"])
 
 # Initialize service (singleton)
 service = ATSService()
+
+# Canonical planet symbol → ID mapping with common aliases
+_SYMBOL_TO_ID = {
+    # Canonical symbols
+    "SUN": 1,
+    "MOON": 2,
+    "JUP": 3,
+    "RAH": 4,
+    "MERC": 5,
+    "VEN": 6,
+    "KET": 7,
+    "SAT": 8,
+    "MAR": 9,
+    # KP 2-letter aliases
+    "SU": 1,
+    "MO": 2,
+    "JU": 3,
+    "RA": 4,
+    "ME": 5,
+    "VE": 6,
+    "KE": 7,
+    "SA": 8,
+    "MA": 9,
+    # Legacy 3-letter alias for Mercury
+    "MER": 5,
+}
 
 
 class ATSTransitRequest(BaseModel):
@@ -36,6 +62,27 @@ class ATSTransitRequest(BaseModel):
         description="List of target planet IDs (1-9). Defaults to [6, 5] (Venus, Mercury)",
     )
 
+    @field_validator("targets", mode="before")
+    @classmethod
+    def _normalize_targets(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, list):
+            out: list[int] = []
+            for item in v:
+                if isinstance(item, int):
+                    out.append(item)
+                elif isinstance(item, str):
+                    token = item.strip().upper()
+                    pid = _SYMBOL_TO_ID.get(token)
+                    if pid is None:
+                        raise ValueError(f"Unknown target token: {item}")
+                    out.append(pid)
+                else:
+                    raise TypeError("targets entries must be int or str")
+            return out
+        raise TypeError("targets must be a list or null")
+
 
 class ATSBatchRequest(BaseModel):
     """Request model for batch ATS calculations"""
@@ -48,6 +95,27 @@ class ATSBatchRequest(BaseModel):
     targets: list[int] | None = Field(
         default=None, description="List of target planet IDs (1-9)"
     )
+
+    @field_validator("targets", mode="before")
+    @classmethod
+    def _normalize_targets(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, list):
+            out: list[int] = []
+            for item in v:
+                if isinstance(item, int):
+                    out.append(item)
+                elif isinstance(item, str):
+                    token = item.strip().upper()
+                    pid = _SYMBOL_TO_ID.get(token)
+                    if pid is None:
+                        raise ValueError(f"Unknown target token: {item}")
+                    out.append(pid)
+                else:
+                    raise TypeError("targets entries must be int or str")
+            return out
+        raise TypeError("targets must be a list or null")
 
 
 class ATSResponse(BaseModel):
