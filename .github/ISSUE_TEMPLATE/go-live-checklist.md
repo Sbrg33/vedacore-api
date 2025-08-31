@@ -29,6 +29,8 @@ Checklist
 - [ ] Server readiness
   - `curl -fsS http://127.0.0.1:8000/api/v1/health/ready`
   - `docker logs vedacore-api` (if not ready)
+  - Docs (local origin): `curl -fsS http://127.0.0.1:8000/api/docs >/dev/null && echo OK`
+  - Metrics (local origin): `curl -fsS http://127.0.0.1:8000/metrics | head -n 10`
 
 - [ ] Public smoke
   - `GET <PUBLIC_URL>/api/v1/health/ready` returns 200
@@ -38,6 +40,11 @@ Checklist
 - [ ] Observability
   - `PROMETHEUS_MULTIPROC_DIR` is writable
   - `WORKERS` set as desired
+
+- [ ] ATS endpoints (if ENABLE_ATS=true)
+  - Status: `curl -sS http://127.0.0.1:8000/api/v1/ats/status | jq .`
+  - Transit (neutral zeros with minimal ATS): `curl -sS -X POST http://127.0.0.1:8000/api/v1/ats/transit -H 'content-type: application/json' -d '{}'`
+  - Config: `curl -sS http://127.0.0.1:8000/api/v1/ats/config | jq .`
 
 Notes
 
