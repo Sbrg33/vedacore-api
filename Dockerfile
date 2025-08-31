@@ -22,6 +22,10 @@ RUN pip install --no-cache-dir -U pip wheel && \
 # Production stage
 FROM python:3.11-slim
 
+# Build-time metadata (git SHA)
+ARG VC_BUILD_SHA=unknown
+ENV VC_BUILD_SHA=${VC_BUILD_SHA}
+
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     curl \

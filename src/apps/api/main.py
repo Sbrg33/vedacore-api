@@ -691,6 +691,16 @@ async def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+# Build/version endpoint for deployment verification
+@app.get("/api/v1/version")
+async def version():
+    """Expose build metadata (git SHA) and symbol policy"""
+    return {
+        "build_sha": os.getenv("VC_BUILD_SHA", "unknown"),
+        "symbol_policy": "ats-3-letter-strict",
+    }
+
+
 # System status endpoint
 @app.get("/api/v1/systems")
 async def get_systems():
