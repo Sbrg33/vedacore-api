@@ -132,6 +132,19 @@ Notes:
 }
 ```
 
+- Quick curl (replace lat/lon/time):
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/kp/ruling-planets \
+  -H 'content-type: application/json' \
+  -d '{
+        "datetime": "2025-09-01T14:00:00Z",
+        "lat": 40.7128,
+        "lon": -74.0060,
+        "include_day_lord": true,
+        "weights": {"asc_nl": 3.0, "moon_nl": 2.0}
+      }'
+```
+
 - Env defaults (server-wide): set before starting the container
   - `RP_W_DAY_LORD`, `RP_W_ASC_NL`, `RP_W_ASC_SL`, `RP_W_ASC_SSL`
   - `RP_W_MOON_NL`, `RP_W_MOON_SL`, `RP_W_MOON_SSL`
