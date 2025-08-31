@@ -17,10 +17,10 @@ import os
 # Canonical ATS planet symbols
 PLANETS: Tuple[str, ...] = (
     "SUN",
-    "MOON",
+    "MOO",
     "JUP",
     "RAH",
-    "MERC",
+    "MER",
     "VEN",
     "KET",
     "SAT",

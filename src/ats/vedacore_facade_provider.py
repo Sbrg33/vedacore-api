@@ -15,10 +15,10 @@ from refactor.facade import get_positions
 # Mapping between ATS planet symbols and VedaCore numeric IDs
 ATS_TO_ID = {
     "SUN": 1,
-    "MOON": 2,
+    "MOO": 2,
     "JUP": 3,
     "RAH": 4,
-    "MERC": 5,
+    "MER": 5,
     "VEN": 6,
     "KET": 7,
     "SAT": 8,
@@ -31,7 +31,7 @@ ID_TO_ATS = {v: k for k, v in ATS_TO_ID.items()}
 class VedaCoreFacadeProvider:
     """Fetches ephemeris-derived values for ATS scoring.
 
-    Methods return ATS-style planet keys (e.g., "SUN", "MOON").
+    Methods return ATS-style planet keys (e.g., "SUN", "MOO").
     """
 
     def __init__(self, apply_finance_offset: bool = True) -> None:
@@ -82,8 +82,8 @@ class VedaCoreFacadeProvider:
         pdata = get_positions(ts, planet_id=2, apply_kp_offset=self.apply_finance_offset)
         # NL/SL/SL2 are numeric IDs; convert to ATS symbols
         nl = ID_TO_ATS.get(pdata.nl, "SUN")
-        sl = ID_TO_ATS.get(pdata.sl, "MOON")
-        sl2 = ID_TO_ATS.get(pdata.sl2, "MERC")
+        sl = ID_TO_ATS.get(pdata.sl, "MOO")
+        sl2 = ID_TO_ATS.get(pdata.sl2, "MER")
         return nl, sl, sl2
 
     def get_planet_chains(self, ts: datetime) -> dict[str, tuple[str, str, str]]:
@@ -97,8 +97,7 @@ class VedaCoreFacadeProvider:
             pdata = get_positions(ts, planet_id=pid, apply_kp_offset=self.apply_finance_offset)
             chains[sym] = (
                 ID_TO_ATS.get(pdata.nl, "SUN"),
-                ID_TO_ATS.get(pdata.sl, "MOON"),
-                ID_TO_ATS.get(pdata.sl2, "MERC"),
+                ID_TO_ATS.get(pdata.sl, "MOO"),
+                ID_TO_ATS.get(pdata.sl2, "MER"),
             )
         return chains
-

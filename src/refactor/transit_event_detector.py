@@ -38,7 +38,7 @@ class TransitEvent:
 
     id: str  # Deterministic hash for deduplication
     ts: datetime
-    trigger: str = "MOON"  # Always Moon for this system
+    trigger: str = "MOO"  # Always Moon for this system
     target: int = 0  # Target planet ID
     target_name: str = ""
     kind: str = "TRANSIT_TO_TRANSIT"

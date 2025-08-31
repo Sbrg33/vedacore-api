@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 # ID mapping at adapter boundary ONLY - core remains unchanged
 ID_TO_ATS = {
     1: "SUN",
-    2: "MOON",
+    2: "MOO",
     3: "JUP",
     4: "RAH",
-    5: "MERC",
+    5: "MER",
     6: "VEN",
     7: "KET",
     8: "SAT",
@@ -45,11 +45,8 @@ ID_TO_ATS = {
 ATS_TO_ID = {v: k for k, v in ID_TO_ATS.items()}
 
 
-# Minimal internal normalization for interop between facade and ATS core
-# (Facade returns 'MER' in KP chains; ATS core expects 'MERC').
-ALIASES = {
-    "MER": "MERC",
-}
+# No aliases: internal canonical tokens are strictly 3-letter
+ALIASES: dict[str, str] = {}
 
 
 def _canon(name: str) -> str:
@@ -106,7 +103,7 @@ class ATSSystemAdapter(BaseSystemAdapter):
 
         self.context_yaml = context_yaml
         self.ref_norm = 1.5  # Reference for 0-100 scaling
-        self.default_targets = ("VEN", "MERC")  # Default scoring targets
+        self.default_targets = ("VEN", "MER")  # Default scoring targets
 
         # Cache loaded context
         self._context_cache = None
@@ -194,8 +191,6 @@ class ATSSystemAdapter(BaseSystemAdapter):
             nl, sl, ssl = self.facade.get_moon_chain(
                 ts_utc
             )  # Returns ('JUP', 'VEN', 'MER')
-            # Canonicalize KP chain values to ATS tokens (e.g., MER → MERC)
-            nl, sl, ssl = (_canon(nl), _canon(sl), _canon(ssl))
 
             # Optional: get planet chains for all planets
             planet_chains = (
