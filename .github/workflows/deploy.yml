@@ -115,7 +115,8 @@ jobs:
             # Pull & restart container directly on port 80 (bypass nginx)
             docker rm -f vedacore-api || true
             docker pull "$IMAGE"
-            docker run -d --rm --name vedacore-api \
+            # Run with restart policy to persist across host reboots
+            docker run -d --name vedacore-api --restart unless-stopped \
               -p ${PORT}:8000 \
               -e ENVIRONMENT=production \
               -e VC_ENV=remote \

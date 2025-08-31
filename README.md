@@ -44,7 +44,7 @@ Key vars:
 
 ```bash
 docker build -t vedacore-api .
-docker run -d --rm --name vedacore-api -p 8000:8000 \
+docker run -d --name vedacore-api --restart unless-stopped -p 8000:8000 \
   -e ENVIRONMENT=production \
   -e VC_ENV=remote \
   -e AUTH_JWT_SECRET='your-long-secret' \
@@ -104,7 +104,7 @@ docker login ghcr.io -u <GHCR_USERNAME> -p <GHCR_TOKEN>
 docker pull ghcr.io/$OWNER/vedacore-api:latest
 
 docker rm -f vedacore-api || true
-docker run -d --rm --name vedacore-api -p 8000:8000 \
+docker run -d --name vedacore-api --restart unless-stopped -p 8000:8000 \
   -e ENVIRONMENT=production \
   -e VC_ENV=remote \
   -e AUTH_JWT_SECRET='<32+ char random>' \
@@ -122,7 +122,7 @@ Notes:
 - Auth & Env: set `ENVIRONMENT=production`, `VC_ENV=remote`; configure either `AUTH_JWKS_URL` (preferred) or a strong `AUTH_JWT_SECRET` (≥32 chars). Set `API_KEY_V1_CUTOFF_DATE` to enable API key routing middleware.
 - CORS: define `CORS_ALLOWED_ORIGINS` with explicit, protocol‑prefixed domains (no wildcards in production).
 - Image Tag: deploy pinned GHCR tag `sha-<long-commit>`; avoid `latest`. Validate with `GET /api/v1/version`.
-- Ports & Health: expose `-p 80:8000` (or set `PORT`); ensure port 80 is free (stop nginx/apache if not used). Monitors should hit `/api/v1/health/up`; readiness gate at `/api/v1/health/ready`.
+- Ports & Health: expose `-p 80:8000` (or set `PORT`); ensure port 80 is free (stop nginx/apache if not used). Use `--restart unless-stopped` for reboot persistence. Monitors should hit `/api/v1/health/up`; readiness gate at `/api/v1/health/ready`.
 - Metrics & Workers: set `PROMETHEUS_MULTIPROC_DIR` (writable) and `WORKERS` as desired; confirm `/metrics` responds.
 - Optional Redis: set `REDIS_URL` for backpressure and token auditing; service runs without it but with reduced hardening.
 - ATS (optional): enable via `ENABLE_ATS=true`; symbol policy is strict (3‑letter) and integers 1–9 are accepted.
