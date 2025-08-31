@@ -12,6 +12,10 @@ on:
         description: "Public URL to test (default: https://api.vedacore.io)"
         default: "https://api.vedacore.io"
         required: false
+      environment:
+        description: "Target environment (production|staging)"
+        default: "production"
+        required: false
   # Auto-deploy when build & push succeeds on main
   workflow_run:
     workflows: ["Build & Push Image (GHCR)"]
@@ -27,8 +31,8 @@ jobs:
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     environment:
-      name: production
-      url: https://api.vedacore.io
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
+      url: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging') && 'https://staging.api.vedacore.io' || 'https://api.vedacore.io' }}
     concurrency:
       group: deploy-vedacore-api
       cancel-in-progress: true
@@ -100,7 +104,13 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             PUBLIC_URL="https://api.vedacore.io"
           else
-            PUBLIC_URL="${{ inputs.public_url || 'https://api.vedacore.io' }}"
+            if [ -n "${{ inputs.public_url }}" ]; then
+              PUBLIC_URL="${{ inputs.public_url }}"
+            elif [ "${{ inputs.environment }}" = "staging" ]; then
+              PUBLIC_URL="https://staging.api.vedacore.io"
+            else
+              PUBLIC_URL="https://api.vedacore.io"
+            fi
           fi
           
           echo "🔍 Testing public readiness: $PUBLIC_URL/api/v1/health/ready"

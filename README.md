@@ -70,10 +70,15 @@ CORS rules:
 - Required secrets: `DO_HOST`, `DO_USER`, `DO_SSH_KEY`, `GHCR_USERNAME`, `GHCR_TOKEN`, `AUTH_JWT_SECRET`, `CORS_ALLOWED_ORIGINS`, optional `REDIS_URL`
 - Auto‑deploy: when "Build & Push Image (GHCR)" succeeds on `main`, the deploy workflow auto‑runs and deploys the exact image tagged `sha-<long-commit>`
 - Concurrency: deploys are serialized (`deploy-vedacore-api` group) to prevent overlap
+- Environments: deploy job uses GitHub Environments (production by default; staging available via manual input)
 - Manual deploy (override or rollback):
   - GitHub UI: Actions → Deploy (SSH via GHCR) → Run workflow
-  - CLI example (deploy specific image):
-    - `gh workflow run "Deploy (SSH via GHCR)" -F tag=sha-<long-commit>`
+  - Inputs:
+    - `environment`: `production` (default) or `staging`
+    - `tag`: image tag (e.g., `sha-<long-commit>` or `latest`)
+    - `public_url`: optional override (defaults per environment)
+  - CLI example (deploy specific image to staging):
+    - `gh workflow run "Deploy (SSH via GHCR)" -F environment=staging -F tag=sha-<long-commit>`
   - Rollback: re‑deploy a previous known good SHA with the same command
 
 ## GHCR Deploy
