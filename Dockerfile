@@ -56,11 +56,11 @@ ENV ACTIVATION_ENABLED="false"
 # Health check configuration for Docker
 # Uses readiness endpoint which validates all critical dependencies
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -fsS http://localhost:8123/api/v1/health/ready -H "Accept: application/json" | \
+    CMD curl -fsS http://localhost:8000/api/v1/health/ready -H "Accept: application/json" | \
         grep -q '"status":"ready"' || exit 1
 
 # Expose port
-EXPOSE 8123
+EXPOSE 8000
 
 # Entrypoint ensures runtime dirs exist, then launches uvicorn
 COPY --chown=ephemeris:ephemeris tools/docker-entrypoint.sh /app/tools/docker-entrypoint.sh

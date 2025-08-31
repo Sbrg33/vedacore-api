@@ -47,7 +47,7 @@ jobs:
             docker rm -f vedacore-api || true
             docker pull "$IMAGE"
             docker run -d --rm --name vedacore-api \
-              -p ${PORT}:8123 \
+              -p 80:8000 \
               -e ENVIRONMENT=production \
               -e VC_ENV=remote \
               -e AUTH_JWT_SECRET="${AUTH_JWT_SECRET}" \
@@ -56,7 +56,7 @@ jobs:
             # Wait for readiness
             i=0; ok=0; \
             while [ $i -lt 45 ]; do \
-              if curl -fsS http://127.0.0.1:${PORT}/api/v1/health/ready >/dev/null 2>&1; then ok=1; break; fi; \
+              if curl -fsS http://127.0.0.1:80/api/v1/health/ready >/dev/null 2>&1; then ok=1; break; fi; \
               i=$((i+1)); sleep 2; \
             done; \
             if [ $ok -eq 1 ]; then echo "✅ Ready"; else echo "❌ Not ready"; docker logs vedacore-api || true; exit 1; fi
