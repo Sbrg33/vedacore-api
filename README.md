@@ -219,6 +219,9 @@ curl -sS http://127.0.0.1:8000/api/v1/ats/config | jq .
 - Condition factor: retrograde sources are scaled by 0.9
 - KP emphasis: edges into Moon’s NL/SL/SSL can be up-weighted
 
+Accepted target symbols (API): strictly one of
+`SUN, MOO, JUP, RAH, MER, VEN, KET, SAT, MAR` (or integer IDs 1–9).
+
 Configure via env:
 ```bash
 # Orbs

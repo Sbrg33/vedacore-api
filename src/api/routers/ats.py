@@ -23,30 +23,17 @@ router = APIRouter(prefix="/api/v1/ats", tags=["ATS"])
 # Initialize service (singleton)
 service = ATSService()
 
-# Canonical planet symbol → ID mapping with common aliases
+# Canonical planet symbol → ID mapping (strict, no aliases)
 _SYMBOL_TO_ID = {
-    # Canonical symbols
     "SUN": 1,
-    "MOON": 2,
+    "MOO": 2,
     "JUP": 3,
     "RAH": 4,
-    "MERC": 5,
+    "MER": 5,
     "VEN": 6,
     "KET": 7,
     "SAT": 8,
     "MAR": 9,
-    # KP 2-letter aliases
-    "SU": 1,
-    "MO": 2,
-    "JU": 3,
-    "RA": 4,
-    "ME": 5,
-    "VE": 6,
-    "KE": 7,
-    "SA": 8,
-    "MA": 9,
-    # Legacy 3-letter alias for Mercury
-    "MER": 5,
 }
 
 

@@ -45,18 +45,10 @@ ID_TO_ATS = {
 ATS_TO_ID = {v: k for k, v in ID_TO_ATS.items()}
 
 
-# Common alias mapping (KP 2-letter and legacy 3-letter → ATS canonical)
+# Minimal internal normalization for interop between facade and ATS core
+# (Facade returns 'MER' in KP chains; ATS core expects 'MERC').
 ALIASES = {
-    "SU": "SUN",
-    "MO": "MOON",
-    "JU": "JUP",
-    "RA": "RAH",
-    "ME": "MERC",
     "MER": "MERC",
-    "VE": "VEN",
-    "KE": "KET",
-    "SA": "SAT",
-    "MA": "MAR",
 }
 
 
@@ -161,17 +153,17 @@ class ATSSystemAdapter(BaseSystemAdapter):
         if ts_utc.tzinfo is None:
             ts_utc = ts_utc.replace(tzinfo=UTC)
 
-        # Get targets (can be numeric IDs or string names). If None/empty, use defaults.
+        # Get targets (prefer numeric IDs from API). If None/empty, use defaults.
         targets = kwargs.get("targets")
         if not targets:
             targets = self.default_targets
 
-        # Convert numeric IDs to ATS strings if needed
+        # Convert numeric IDs to ATS strings; avoid string aliases at this layer
         if targets and isinstance(targets[0], int):
-            targets = tuple(_canon(ID_TO_ATS.get(t, f"UNKNOWN_{t}")) for t in targets)
+            targets = tuple(ID_TO_ATS.get(t, f"UNKNOWN_{t}") for t in targets)
         elif targets and isinstance(targets[0], str):
-            # Normalize aliases to canonical tokens
-            targets = tuple(_canon(t) for t in targets)
+            # Only accept already-canonical ATS tokens here
+            targets = tuple(t.upper() for t in targets)
 
         # Override context if specified
         if "context_yaml" in kwargs:
