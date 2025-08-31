@@ -107,6 +107,41 @@ Notes:
 - Run: `make test` or `PYTHONPATH=./src:. pytest -v`
 - Minimal suite validates docs, readiness, and metrics.
 
+## KP Ruling Planets Weights
+
+- API override: POST `/api/v1/kp/ruling-planets` accepts optional `weights`:
+```json
+{
+  "datetime": "2025-09-01T14:00:00Z",
+  "lat": 40.7128,
+  "lon": -74.0060,
+  "include_day_lord": true,
+  "weights": {
+    "day_lord": 2.0,
+    "asc_nl": 3.0,
+    "asc_sl": 1.5,
+    "asc_ssl": 0.5,
+    "moon_nl": 2.0,
+    "moon_sl": 1.0,
+    "moon_ssl": 0.5,
+    "exalt": 0.75,
+    "own": 0.5,
+    "normalize": true,
+    "top_k_primary": 5
+  }
+}
+```
+
+- Env defaults (server-wide): set before starting the container
+  - `RP_W_DAY_LORD`, `RP_W_ASC_NL`, `RP_W_ASC_SL`, `RP_W_ASC_SSL`
+  - `RP_W_MOON_NL`, `RP_W_MOON_SL`, `RP_W_MOON_SSL`
+  - `RP_W_EXALT`, `RP_W_OWN`, `RP_NORMALIZE`, `RP_TOP_K_PRIMARY`
+  - Example:
+```bash
+export RP_W_DAY_LORD=2.0 RP_W_ASC_NL=3.0 RP_W_MOON_NL=1.5 \
+       RP_W_EXALT=1.0 RP_W_OWN=0.25 RP_NORMALIZE=true RP_TOP_K_PRIMARY=5
+```
+
 ## Troubleshooting
 
 - Readiness 503: missing auth (`AUTH_JWT_SECRET`/`AUTH_JWKS_URL`) or CORS misconfig in prod.
