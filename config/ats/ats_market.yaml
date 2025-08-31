@@ -14,3 +14,17 @@ planet_weight_base:
   SAT: 0.98
   RAH: 1.00
   KET: 0.99
+
+# Aspect configuration (orbs in degrees, base weights)
+aspects:
+  conj: { orb: 8.0, weight: 1.0 }
+  opp:  { orb: 7.0, weight: 0.8 }
+  tri:  { orb: 6.0, weight: 0.7 }
+  sqr:  { orb: 6.0, weight: 0.6 }
+  sex:  { orb: 4.0, weight: 0.5 }
+
+# KP Moon-chain emphasis multipliers for destination planets
+kp_emphasis:
+  nl: 1.10   # Nakshatra Lord emphasis
+  sl: 1.05   # Sub Lord emphasis
+  ssl: 1.02  # Sub-Sub Lord emphasis
