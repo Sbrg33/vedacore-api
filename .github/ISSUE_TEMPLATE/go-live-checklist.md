@@ -34,6 +34,7 @@ Checklist
 
 - [ ] Public smoke
   - `GET <PUBLIC_URL>/api/v1/health/ready` returns 200
+  - `GET <PUBLIC_URL>/api/v1/health/up` returns "ok"
   - `GET <PUBLIC_URL>/api/docs` returns 200/308
   - `GET <PUBLIC_URL>/metrics` returns 200
   - ATS public endpoint: `curl -sS <PUBLIC_URL>/api/v1/ats/status | jq .status`
@@ -41,6 +42,7 @@ Checklist
 - [ ] Deployment version verification
   - `curl -fsS <PUBLIC_URL>/api/v1/version | jq -r .build_sha` matches deployed `sha-<commit>`
   - Alt: `curl -fsS <PUBLIC_URL>/api/v1/health/version | jq .`
+  - Optional: `make check-health BASE=<PUBLIC_URL>` (prefers /health/up)
 
 - [ ] CI gates green for target SHA
   - Minimal CI succeeded (unit + docker-smoke)

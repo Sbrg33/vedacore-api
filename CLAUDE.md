@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Local smoke test**: `make smoke-local` (starts API, checks health, stops)
 - **Docker build**: `make docker-build`
 - **Docker smoke test**: `make docker-smoke`
+- **Health check**: `make check-health BASE=http://127.0.0.1:8000`
 
 ### Environment Setup
 Always set `PYTHONPATH=./src:.` when running Python commands directly:
@@ -76,7 +77,8 @@ Production environment (`ENVIRONMENT=production`) enforces:
 - Test path: `testpaths = tests`
 
 ### Health Endpoints
-- **Liveness**: `GET /api/v1/health/live`
+- **Plain liveness**: `GET /api/v1/health/up` (plaintext "ok")
+- **JSON liveness**: `GET /api/v1/health/live`
 - **Readiness**: `GET /api/v1/health/ready` (validates all dependencies)
 - **Version**: `GET /api/v1/version` (build SHA and symbol policy)
 

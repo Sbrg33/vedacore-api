@@ -57,6 +57,11 @@ Health gate:
 curl -fsS http://localhost:8000/api/v1/health/ready || docker logs --tail 200 vedacore-api
 ```
 
+Plaintext liveness (for external monitors):
+```bash
+curl -fsS http://localhost:8000/api/v1/health/up
+```
+
 Auth options:
 - JWKS: set `AUTH_JWKS_URL` (add `AUTH_AUDIENCE`/`AUTH_ISSUER` as needed)
 - HS256: set `AUTH_JWT_SECRET` (min 32 chars)
@@ -114,12 +119,18 @@ Notes:
 
 ## Observability
 
+- `/api/v1/health/up`: plaintext "ok" for liveness probes.
+- `/api/v1/health/ready`: JSON readiness gate validating subsystems.
+- `/api/v1/health/live`: JSON liveness (includes `process_id` as string).
 - `/metrics` exposes Prometheus metrics.
 - Multi-worker metrics use `PROMETHEUS_MULTIPROC_DIR` (default `/tmp/prometheus`).
 - Internal metrics helpers are wired via `refactor.monitoring`.
 
 Quick checks:
 ```bash
+# Health (preferred for monitors)
+curl -fsS http://127.0.0.1:8000/api/v1/health/up
+
 # Readiness (used in CI)
 curl -fsS http://127.0.0.1:8000/api/v1/health/ready
 
@@ -128,12 +139,21 @@ curl -fsS http://127.0.0.1:8000/api/docs >/dev/null && echo OK
 
 # Metrics endpoint
 curl -fsS http://127.0.0.1:8000/metrics | head -n 10
+
+# Portable health checker (prefers /health/up, fallback /health/ready)
+make check-health BASE=http://127.0.0.1:8000
 ```
 
 ## Testing
 
 - Run: `make test` or `PYTHONPATH=./src:. pytest -v`
 - Minimal suite validates docs, readiness, and metrics.
+
+## Tools
+
+- `tools/check_api_health.py`: portable API health checker (no deps). Examples:
+  - `python tools/check_api_health.py --base http://127.0.0.1:8000`
+  - `python tools/check_api_health.py --base https://api.vedacore.io --json`
 
 ## KP Ruling Planets Weights
 
@@ -198,6 +218,10 @@ docker run -d --rm --name vedacore-api -p 8000:8000 \
   -e CORS_ALLOWED_ORIGINS='https://your-frontend.example' \
   ghcr.io/$OWNER/vedacore-api:latest
 ```
+
+Notes:
+- In production, set `API_KEY_V1_CUTOFF_DATE` to enable API key routing middleware.
+- Health check inside the container targets `/api/v1/health/ready` and honors `PORT`.
 
 - Quick curl examples (replace timestamp if desired):
 ```bash
