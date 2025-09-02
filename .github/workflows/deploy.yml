@@ -48,10 +48,19 @@ jobs:
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # Use long SHA tag published by build workflow
+            # Use long SHA tag published by build workflow (deterministic deploy)
             echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=${{ inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+            # Manual: prefer provided tag; if omitted, default to current run SHA
+            if [ -n "${{ inputs.tag }}" ]; then
+              echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+              # Try to extract sha-XXXX to compare later (best-effort)
+              echo "sha=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            else
+              echo "tag=sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+              echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Resolve REDIS_URL secret
@@ -87,10 +96,15 @@ jobs:
           script: |
             set -euo pipefail
             IMAGE="ghcr.io/${{ github.repository_owner }}/vedacore-api:${{ steps.tag.outputs.tag }}"
+            INTENDED_SHA="${{ steps.tag.outputs.sha }}"
             # Check required environment variables
             : ${GHCR_USERNAME:?GHCR_USERNAME not set}
             : ${GHCR_TOKEN:?GHCR_TOKEN not set}
-            : ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET not set}
+            # AUTH may be provided via JWKS or static secret
+            if [ -z "${AUTH_JWT_SECRET:-}" ] && [ -z "${AUTH_JWKS_URL:-}" ]; then
+              echo "ERROR: AUTH_JWT_SECRET or AUTH_JWKS_URL must be set" >&2
+              exit 1
+            fi
             : ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS not set}
             # Login to GHCR (read:packages token)
             docker login ghcr.io -u "$GHCR_USERNAME" -p "$GHCR_TOKEN"
@@ -135,13 +149,22 @@ jobs:
             docker rm -f vedacore-api || true
             docker pull "$IMAGE"
             # Run with restart policy to persist across host reboots
+            # Decide VC_ENV based on DB env presence (default to local if missing)
+            VC_ENV_VALUE="remote"
+            if [ -z "${DATABASE_URL:-}" ] && [ -z "${SUPABASE_DATABASE_URL:-}" ]; then
+              VC_ENV_VALUE="local"
+              echo "INFO: DATABASE_URL/SUPABASE_DATABASE_URL not set, using VC_ENV=local"
+            fi
             docker run -d --name vedacore-api --restart unless-stopped \
               -p ${PORT}:8000 \
               -e ENVIRONMENT=production \
-              -e VC_ENV=remote \
+              -e VC_ENV=${VC_ENV_VALUE} \
               -e AUTH_JWT_SECRET="${AUTH_JWT_SECRET}" \
               -e CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS}" \
+              ${AUTH_JWKS_URL:+ -e AUTH_JWKS_URL="${AUTH_JWKS_URL}"} \
               ${REDIS_URL:+ -e REDIS_URL="${REDIS_URL}"} \
+              ${DATABASE_URL:+ -e DATABASE_URL="${DATABASE_URL}"} \
+              ${SUPABASE_DATABASE_URL:+ -e SUPABASE_DATABASE_URL="${SUPABASE_DATABASE_URL}"} \
               "$IMAGE"
             # Wait for readiness on direct port access
             i=0; ok=0; \
@@ -150,6 +173,34 @@ jobs:
               i=$((i+1)); sleep 2; \
             done; \
             if [ $ok -eq 1 ]; then echo "✅ Ready"; else echo "❌ Not ready"; docker logs vedacore-api || true; exit 1; fi
+            # Verify running build SHA matches intended (best effort)
+            RUN_SHA=$(curl -fsS http://127.0.0.1:${PORT}/api/v1/health/version 2>/dev/null | python3 - << 'PY'
+import sys, json
+try:
+    d=json.load(sys.stdin)
+    # allow both build_sha and build.sha key styles
+    print(d.get('build_sha') or d.get('build',{}).get('sha') or '')
+except Exception:
+    print('')
+PY
+)
+            if [ -n "$INTENDED_SHA" ] && [ -n "$RUN_SHA" ]; then
+              case "$INTENDED_SHA" in
+                sha-*) EXPECTED=${INTENDED_SHA#sha-} ;;
+                *) EXPECTED=$INTENDED_SHA ;;
+              esac
+              SHORT_EXPECTED=${EXPECTED:0:7}
+              SHORT_RUN=${RUN_SHA:0:7}
+              echo "Expected SHA: $SHORT_EXPECTED | Running SHA: $SHORT_RUN"
+              if [ "$SHORT_EXPECTED" != "$SHORT_RUN" ]; then
+                echo "❌ Version mismatch after deploy" >&2
+                docker logs vedacore-api || true
+                exit 1
+              fi
+              echo "✅ Version verified"
+            else
+              echo "⚠️ Could not verify running SHA (missing data)"
+            fi
 
   post-smoke:
     runs-on: ubuntu-latest
