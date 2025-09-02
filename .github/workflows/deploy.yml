@@ -87,12 +87,6 @@ jobs:
           port: ${{ secrets.DO_PORT || '22' }}
           script_stop: true
           envs: AUTH_JWT_SECRET,CORS_ALLOWED_ORIGINS,GHCR_USERNAME,GHCR_TOKEN,PORT,REDIS_URL
-        env:
-          AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
-          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          REDIS_URL: ${{ steps.redis.outputs.url }}
           script: |
             set -euo pipefail
             IMAGE="ghcr.io/${{ github.repository_owner }}/vedacore-api:${{ steps.tag.outputs.tag }}"
@@ -201,6 +195,12 @@ PY
             else
               echo "⚠️ Could not verify running SHA (missing data)"
             fi
+        env:
+          AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          REDIS_URL: ${{ steps.redis.outputs.url }}
 
   post-smoke:
     runs-on: ubuntu-latest
