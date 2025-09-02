@@ -226,7 +226,8 @@ async def version_info() -> VersionResponse:
     try:
         from refactor.facade import get_version_info
 
-        facade_version = get_version_info()
+        version_info = get_version_info()
+        facade_version = version_info.get("version", "unknown")
     except Exception:
         facade_version = "unavailable"
 
