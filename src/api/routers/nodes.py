@@ -7,7 +7,7 @@ Provides REST API for node events and current state.
 import logging
 import time
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -233,7 +233,7 @@ async def get_current_node_state(
 
         # Use current time if not provided
         if timestamp is None:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(UTC)
         else:
             timestamp = validate_utc_datetime(timestamp)
 
@@ -243,7 +243,7 @@ async def get_current_node_state(
         )
 
         # Check cache (very short TTL)
-        cached_result = cache_service.get(cache_key)
+        cached_result = await cache_service.get(cache_key)
         if cached_result:
             nodes_cache_hits_total.inc()
             state = cached_result
@@ -257,7 +257,7 @@ async def get_current_node_state(
             state = adapter.get_current_state(timestamp)
 
             # Cache result (TTL: 5 seconds)
-            cache_service.set(cache_key, state, ttl=5)
+            await cache_service.set(cache_key, state, ttl=5)
 
         # Add performance metadata
         compute_time = time.time() - start_time
@@ -309,7 +309,7 @@ async def get_next_event(
 
         # Use current time if not provided
         if from_time is None:
-            from_time = datetime.utcnow()
+            from_time = datetime.now(UTC)
         else:
             from_time = validate_utc_datetime(from_time)
 

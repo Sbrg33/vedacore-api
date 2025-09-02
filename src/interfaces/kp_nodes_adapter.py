@@ -145,7 +145,7 @@ class KPNodesAdapter:
             Current state dictionary
         """
         if ts_utc is None:
-            ts_utc = datetime.utcnow()
+            ts_utc = datetime.now(UTC)
         else:
             ts_utc = validate_utc_datetime(ts_utc)
 
@@ -180,7 +180,7 @@ class KPNodesAdapter:
             Next event dictionary or None
         """
         if from_time is None:
-            from_time = datetime.utcnow()
+            from_time = datetime.now(UTC)
         else:
             from_time = validate_utc_datetime(from_time)
 

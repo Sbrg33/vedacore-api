@@ -180,9 +180,12 @@ async def health_check():
     }
 
     if advisory_registry:
-        adapter = advisory_registry.get("kp_horary")
-        status["adapter_registered"] = adapter is not None
-        if adapter:
-            status["adapter_version"] = adapter.version
+        try:
+            adapter = advisory_registry.get("kp_horary")
+            status["adapter_registered"] = True
+            status["adapter_version"] = getattr(adapter, "version", "unknown")
+        except Exception:
+            # Adapter not registered yet; report gracefully
+            status["adapter_registered"] = False
 
     return status
