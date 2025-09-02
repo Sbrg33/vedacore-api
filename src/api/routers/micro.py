@@ -16,6 +16,13 @@ from prometheus_client import Counter, Gauge, Histogram
 from pydantic import BaseModel, Field, field_validator
 
 from interfaces.registry import get_system
+from api.models.responses import (
+    MicroDayResponse,
+    MicroRangeResponse,
+    MicroNextResponse,
+    MicroInstantResponse,
+    MicroConfigResponse,
+)
 
 logger = logging.getLogger(__name__)
 UTC = UTC
@@ -114,8 +121,8 @@ class InstantRequest(BaseModel):
             raise ValueError(f"Invalid timestamp format: {v}")
 
 
-@router.post("/day", summary="Get volatility windows for a day")
-async def micro_day(req: DayRequest = Body(...)) -> dict[str, Any]:
+@router.post("/day", summary="Get volatility windows for a day", response_model=MicroDayResponse)
+async def micro_day(req: DayRequest = Body(...)) -> MicroDayResponse:
     """
     Generate volatility windows for a single day.
 
@@ -151,7 +158,13 @@ async def micro_day(req: DayRequest = Body(...)) -> dict[str, Any]:
             )
             micro_window_count.labels(strength=strength, system=req.system).set(count)
 
-        return result
+        return MicroDayResponse(
+            date=req.date,
+            system=req.system,
+            windows=result.get("windows", []),
+            summary=result.get("summary", {}),
+            computation_time_ms=compute_time * 1000,
+        )
 
     except HTTPException:
         raise
@@ -161,8 +174,8 @@ async def micro_day(req: DayRequest = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/range", summary="Get volatility windows for date range")
-async def micro_range(req: RangeRequest = Body(...)) -> dict[str, Any]:
+@router.post("/range", summary="Get volatility windows for date range", response_model=MicroRangeResponse)
+async def micro_range(req: RangeRequest = Body(...)) -> MicroRangeResponse:
     """
     Generate volatility windows for a date range.
 
@@ -198,7 +211,14 @@ async def micro_range(req: RangeRequest = Body(...)) -> dict[str, Any]:
             compute_time
         )
 
-        return result
+        return MicroRangeResponse(
+            start_date=req.start,
+            end_date=req.end,
+            system=req.system,
+            timeline=result.get("timeline", []),
+            summary=result.get("summary", {}),
+            computation_time_ms=compute_time * 1000,
+        )
 
     except HTTPException:
         raise
@@ -208,13 +228,13 @@ async def micro_range(req: RangeRequest = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/next", summary="Find next volatility window")
+@router.get("/next", summary="Find next volatility window", response_model=MicroNextResponse)
 async def micro_next(
     system: str = Query(default="KP_MICRO", description="System identifier"),
     threshold: Strength = Query(
         default="high", description="Minimum volatility strength"
     ),
-) -> dict[str, Any]:
+) -> MicroNextResponse:
     """
     Find the next upcoming volatility window meeting the threshold.
 
@@ -238,7 +258,13 @@ async def micro_next(
         compute_time = time.time() - start_time
         micro_compute_time.labels(endpoint="next", system=system).observe(compute_time)
 
-        return result
+        return MicroNextResponse(
+            system=system,
+            threshold=threshold,
+            next_window=result.get("next_window"),
+            search_range_days=result.get("search_range_days", 31),
+            found=result.get("found", False),
+        )
 
     except HTTPException:
         raise
@@ -248,8 +274,8 @@ async def micro_next(
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/instant", summary="Get instantaneous volatility score")
-async def micro_instant(req: InstantRequest = Body(...)) -> dict[str, Any]:
+@router.post("/instant", summary="Get instantaneous volatility score", response_model=MicroInstantResponse)
+async def micro_instant(req: InstantRequest = Body(...)) -> MicroInstantResponse:
     """
     Calculate volatility score at a specific timestamp.
 
@@ -280,7 +306,14 @@ async def micro_instant(req: InstantRequest = Body(...)) -> dict[str, Any]:
             compute_time
         )
 
-        return result
+        return MicroInstantResponse(
+            timestamp=req.timestamp,
+            system=req.system,
+            score=result.get("score", 0),
+            strength=result.get("strength", "low"),
+            factors=result.get("factors", []),
+            computation_time_ms=compute_time * 1000,
+        )
 
     except HTTPException:
         raise
@@ -290,8 +323,8 @@ async def micro_instant(req: InstantRequest = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/config", summary="Get micro-timing configuration")
-async def micro_config(system: str = Query(default="KP_MICRO")) -> dict[str, Any]:
+@router.get("/config", summary="Get micro-timing configuration", response_model=MicroConfigResponse)
+async def micro_config(system: str = Query(default="KP_MICRO")) -> MicroConfigResponse:
     """
     Get current micro-timing configuration and metadata.
 
@@ -305,9 +338,22 @@ async def micro_config(system: str = Query(default="KP_MICRO")) -> dict[str, Any
 
         # Get metadata
         if hasattr(adapter, "get_metadata"):
-            return adapter.get_metadata()
+            metadata = adapter.get_metadata()
+            return MicroConfigResponse(
+                system=system,
+                config=metadata.get("config", {}),
+                weights=metadata.get("weights", {}),
+                thresholds=metadata.get("thresholds", {}),
+                features=metadata.get("features", {}),
+            )
         else:
-            return {"system": system, "message": "Metadata not available"}
+            return MicroConfigResponse(
+                system=system,
+                config={},
+                weights={},
+                thresholds={},
+                features={"message": "Metadata not available"},
+            )
 
     except HTTPException:
         raise

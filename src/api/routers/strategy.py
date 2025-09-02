@@ -16,6 +16,13 @@ from prometheus_client import Counter, Gauge, Histogram
 from pydantic import BaseModel, Field, field_validator
 
 from interfaces.registry import get_system
+from api.models.responses import (
+    StrategyConfigResponse,
+    StrategyDayResponse,
+    StrategyDryRunResponse,
+    StrategyHealthResponse,
+    StrategyWindowResponse,
+)
 
 logger = logging.getLogger(__name__)
 UTC = UTC
@@ -127,8 +134,8 @@ class ConfigDryrunRequest(BaseModel):
     system: str = Field(default="KP_STRATEGY", description="System identifier")
 
 
-@router.post("/day", summary="Get daily confidence timeline")
-async def strategy_day(req: DayRequest = Body(...)) -> dict[str, Any]:
+@router.post("/day", summary="Get daily confidence timeline", response_model=StrategyDayResponse)
+async def strategy_day(req: DayRequest = Body(...)) -> StrategyDayResponse:
     """
     Generate minute-by-minute confidence timeline for a trading day.
 
@@ -182,7 +189,13 @@ async def strategy_day(req: DayRequest = Body(...)) -> dict[str, Any]:
             for rule in signal.get("rules_applied", []):
                 strategy_rules_applied.labels(rule_name=rule).inc()
 
-        return result
+        return StrategyDayResponse(
+            date=req.date,
+            ticker=req.ticker,
+            timeline=result.get("timeline", []),
+            summary=result.get("summary", {}),
+            computation_time_ms=compute_time * 1000,
+        )
 
     except HTTPException:
         raise
@@ -192,8 +205,8 @@ async def strategy_day(req: DayRequest = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/window", summary="Get window confidence aggregation")
-async def strategy_window(req: WindowRequest = Body(...)) -> dict[str, Any]:
+@router.post("/window", summary="Get window confidence aggregation", response_model=StrategyWindowResponse)
+async def strategy_window(req: WindowRequest = Body(...)) -> StrategyWindowResponse:
     """
     Get aggregated confidence statistics for a time window.
 
@@ -219,7 +232,17 @@ async def strategy_window(req: WindowRequest = Body(...)) -> dict[str, Any]:
             compute_time
         )
 
-        return result
+        # Parse timestamps for response model
+        start_dt = datetime.fromisoformat(req.start.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(req.end.replace("Z", "+00:00"))
+
+        return StrategyWindowResponse(
+            ticker=req.ticker,
+            window_start=start_dt,
+            window_end=end_dt,
+            confidence_aggregate=result.get("aggregation", {}),
+            rules_applied=result.get("rules_applied", []),
+        )
 
     except HTTPException:
         raise
@@ -229,8 +252,8 @@ async def strategy_window(req: WindowRequest = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/config", summary="Get strategy configuration")
-async def strategy_config(system: str = Query(default="KP_STRATEGY")) -> dict[str, Any]:
+@router.get("/config", summary="Get strategy configuration", response_model=StrategyConfigResponse)
+async def strategy_config(system: str = Query(default="KP_STRATEGY")) -> StrategyConfigResponse:
     """
     Get current strategy configuration including weights, rules, and thresholds.
     """
@@ -242,9 +265,18 @@ async def strategy_config(system: str = Query(default="KP_STRATEGY")) -> dict[st
 
         # Get metadata
         if hasattr(adapter, "get_metadata"):
-            return adapter.get_metadata()
+            metadata = adapter.get_metadata()
+            return StrategyConfigResponse(
+                ticker="N/A",  # Config is system-wide, not ticker-specific
+                config=metadata.get("config", {}),
+                metadata=metadata.get("metadata", {}),
+            )
         else:
-            return {"system": system, "message": "Metadata not available"}
+            return StrategyConfigResponse(
+                ticker="N/A",
+                config={},
+                metadata={"system": system, "message": "Metadata not available"},
+            )
 
     except HTTPException:
         raise
@@ -253,10 +285,10 @@ async def strategy_config(system: str = Query(default="KP_STRATEGY")) -> dict[st
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/config/dryrun", summary="Test configuration without persisting")
+@router.post("/config/dryrun", summary="Test configuration without persisting", response_model=StrategyDryRunResponse)
 async def strategy_config_dryrun(
     req: ConfigDryrunRequest = Body(...),
-) -> dict[str, Any]:
+) -> StrategyDryRunResponse:
     """
     Test a strategy configuration without persisting it.
 
@@ -290,7 +322,12 @@ async def strategy_config_dryrun(
             endpoint="config_dryrun", ticker=req.ticker
         ).observe(compute_time)
 
-        return result
+        return StrategyDryRunResponse(
+            valid=result.get("valid", True),
+            test_results=result.get("results", {}),
+            errors=result.get("errors"),
+            warnings=result.get("warnings"),
+        )
 
     except HTTPException:
         raise
@@ -300,8 +337,8 @@ async def strategy_config_dryrun(
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/health", summary="Check strategy system health")
-async def strategy_health() -> dict[str, Any]:
+@router.get("/health", summary="Check strategy system health", response_model=StrategyHealthResponse)
+async def strategy_health() -> StrategyHealthResponse:
     """
     Check health of strategy system and dependencies.
     """
@@ -320,14 +357,20 @@ async def strategy_health() -> dict[str, Any]:
 
         # Overall health
         all_healthy = all(dependencies.values())
+        active_systems = [k for k, v in dependencies.items() if v]
 
-        return {
-            "status": "healthy" if all_healthy else "degraded",
-            "system": "KP_STRATEGY",
-            "dependencies": dependencies,
-            "version": adapter.version if hasattr(adapter, "version") else "unknown",
-        }
+        return StrategyHealthResponse(
+            status="healthy" if all_healthy else "degraded",
+            active_systems=active_systems,
+            performance_metrics=dependencies,
+            error=None,
+        )
 
     except Exception as e:
         logger.error(f"Error in strategy_health: {e}")
-        return {"status": "unhealthy", "error": str(e)}
+        return StrategyHealthResponse(
+            status="unhealthy",
+            active_systems=[],
+            performance_metrics={},
+            error=str(e),
+        )

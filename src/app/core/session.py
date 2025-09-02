@@ -6,12 +6,12 @@ Trading session detection based on NY time
 from datetime import datetime, time
 from typing import Literal
 
-from app.services.cache_service import CacheService
+from app.services.unified_cache import get_unified_cache
 
 from .config import NY_TZ, SESSION_BOUNDS
 
-# Global cache service instance
-cache_service = CacheService()
+# Global cache service instance - PM requirement: environment-driven cache selection
+cache_service = get_unified_cache("SESSION")
 
 SessionType = Literal["PRE_MARKET", "REGULAR", "AFTER_HOURS", "OFF_HOURS"]
 

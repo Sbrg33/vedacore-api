@@ -13,6 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.logging import get_api_logger
 from interfaces.advisory_adapter_protocol import advisory_registry
+from api.models.responses import (
+    PanchangaHealthResponse,
+    PanchangaSchemaResponse,
+    PanchangaExplanationResponse,
+)
 
 router = APIRouter(prefix="/api/v1/panchanga", tags=["panchanga"])
 logger = get_api_logger("panchanga")
@@ -134,42 +139,46 @@ async def calculate_panchanga(request: PanchangaRequest) -> PanchangaResponse:
         )
 
 
-@router.get("/health")
-async def panchanga_health():
+@router.get("/health", response_model=PanchangaHealthResponse)
+async def panchanga_health() -> PanchangaHealthResponse:
     """Check Panchanga adapter health via registry"""
     try:
         adapter = advisory_registry.get("panchanga")
         health = adapter.health_check()
 
-        return {
-            "adapter_id": adapter.id,
-            "version": adapter.version,
-            "health": health,
-            "registry_status": "available",
-        }
+        return PanchangaHealthResponse(
+            adapter_id=adapter.id,
+            version=adapter.version,
+            health=health,
+            registry_status="available",
+        )
     except KeyError:
-        return {
-            "adapter_id": "panchanga",
-            "version": "unknown",
-            "health": {"status": "not_registered", "healthy": False},
-            "registry_status": "adapter_missing",
-        }
+        return PanchangaHealthResponse(
+            adapter_id="panchanga",
+            version="unknown",
+            health={"status": "not_registered", "healthy": False},
+            registry_status="adapter_missing",
+        )
 
 
-@router.get("/schema")
-async def panchanga_schema():
+@router.get("/schema", response_model=PanchangaSchemaResponse)
+async def panchanga_schema() -> PanchangaSchemaResponse:
     """Get Panchanga adapter input/output schema"""
     try:
         adapter = advisory_registry.get("panchanga")
         schema = adapter.schema()
 
-        return {"adapter_id": adapter.id, "version": adapter.version, "schema": schema}
+        return PanchangaSchemaResponse(
+            adapter_id=adapter.id,
+            version=adapter.version,
+            schema=schema,
+        )
     except KeyError as e:
         raise HTTPException(status_code=404, detail=f"Panchanga adapter not found: {e}")
 
 
-@router.post("/explain")
-async def explain_panchanga(request: PanchangaRequest):
+@router.post("/explain", response_model=PanchangaExplanationResponse)
+async def explain_panchanga(request: PanchangaRequest) -> PanchangaExplanationResponse:
     """Get explanation of Panchanga results via registry"""
     try:
         adapter = advisory_registry.get("panchanga")
@@ -181,12 +190,12 @@ async def explain_panchanga(request: PanchangaRequest):
         # Then explain it
         explanation = adapter.explain(result)
 
-        return {
-            "status": "success",
-            "result": result,
-            "explanation": explanation,
-            "adapter_info": {"id": adapter.id, "version": adapter.version},
-        }
+        return PanchangaExplanationResponse(
+            status="success",
+            result=result,
+            explanation=explanation,
+            adapter_info={"id": adapter.id, "version": adapter.version},
+        )
     except Exception as e:
         logger.error(f"Panchanga explanation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Explanation error: {e!s}")

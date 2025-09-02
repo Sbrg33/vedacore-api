@@ -161,6 +161,8 @@ async def stream_topic(
             "Cache-Control": "no-cache, no-store, no-transform",
             "X-Accel-Buffering": "no",  # nginx anti-buffering
             "Connection": "keep-alive",  # Keep connection alive
+            # PM Security headers - prevent token leakage
+            "Referrer-Policy": "no-referrer",  # Prevent JWT token leakage via Referer header
             # CORS headers for browser compatibility
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "Cache-Control",

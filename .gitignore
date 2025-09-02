@@ -21,3 +21,10 @@ sdk/
 # But track templates/examples
 !.env.*.template
 !.env.*.example
+
+# Virtual environments
+venv/
+env/
+
+# Cache directories
+data/cache/

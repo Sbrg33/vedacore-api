@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from ..services.auth import AuthError, validate_jwt_token
 from ..services.rate_limiter import log_rate_limit_violation, rate_limiter
 from ..services.ws_manager import ws_manager
+from api.models.responses import WebSocketHealthResponse, WebSocketStatsResponse
 
 # Import metrics for monitoring
 try:
@@ -209,8 +210,8 @@ async def websocket_endpoint(
             logger.error(f"Error during WebSocket cleanup: {e}")
 
 
-@router.get("/health")
-async def websocket_health() -> dict[str, Any]:
+@router.get("/health", response_model=WebSocketHealthResponse)
+async def websocket_health() -> WebSocketHealthResponse:
     """
     WebSocket service health check.
 
@@ -226,25 +227,31 @@ async def websocket_health() -> dict[str, Any]:
             and ws_stats.get("connections", 0) >= 0
         )
 
-        return {
-            "status": "healthy" if healthy else "unhealthy",
-            "service": "vedacore_websocket",
-            "version": "1.0.0",
-            "stats": {
+        return WebSocketHealthResponse(
+            status="healthy" if healthy else "unhealthy",
+            service="vedacore_websocket",
+            version="1.0.0",
+            stats={
                 "active_connections": ws_stats.get("connections", 0),
                 "messages_sent": ws_stats.get("messages_sent", 0),
                 "messages_received": ws_stats.get("messages_received", 0),
                 "total_subscriptions": ws_stats.get("total_subscriptions", 0),
                 "rate_limit_checks": rate_stats.get("total_checks", 0),
             },
-        }
+        )
 
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        return WebSocketHealthResponse(
+            status="unhealthy",
+            service="vedacore_websocket",
+            version="1.0.0",
+            stats={},
+            error=str(e),
+        )
 
 
-@router.get("/stats")
-async def websocket_stats() -> dict[str, Any]:
+@router.get("/stats", response_model=WebSocketStatsResponse)
+async def websocket_stats() -> WebSocketStatsResponse:
     """
     Detailed WebSocket statistics for monitoring.
 
@@ -253,12 +260,12 @@ async def websocket_stats() -> dict[str, Any]:
     ws_stats = ws_manager.get_stats()
     rate_stats = rate_limiter.get_metrics()
 
-    return {
-        "websocket_manager": ws_stats,
-        "rate_limiter": rate_stats,
-        "service_info": {
+    return WebSocketStatsResponse(
+        websocket_manager=ws_stats,
+        rate_limiter=rate_stats,
+        service_info={
             "version": "1.0.0",
             "protocol": "websocket",
             "authentication": "jwt_query_parameter",
         },
-    }
+    )

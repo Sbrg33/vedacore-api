@@ -8,6 +8,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.services.advisory_service import get_advisory_service
+from api.models.responses import (
+    AdvisorySnapshotResponse,
+    AdvisoryRangeResponse,
+    FeatureStatusResponse,
+    RulingPlanetsResponse,
+    ShadbalaResponse,
+    AdvisoryHealthResponse,
+)
 
 router = APIRouter(prefix="/api/v1/advisory", tags=["advisory"])
 
@@ -42,8 +50,8 @@ class RulingPlanetsRequest(BaseModel):
     sunrise: datetime | None = Field(None, description="Sunrise time (UTC)")
 
 
-@router.post("/snapshot", summary="Get advisory snapshot at timestamp")
-async def get_advisory_snapshot(request: AdvisoryRequest):
+@router.post("/snapshot", summary="Get advisory snapshot at timestamp", response_model=AdvisorySnapshotResponse)
+async def get_advisory_snapshot(request: AdvisoryRequest) -> AdvisorySnapshotResponse:
     """Get all enabled advisory calculations for a specific moment.
 
     Returns advisory layers based on enabled feature flags.
@@ -63,14 +71,20 @@ async def get_advisory_snapshot(request: AdvisoryRequest):
             include_timing=request.include_timing,
         )
 
-        return result
+        return AdvisorySnapshotResponse(
+            timestamp=request.timestamp,
+            latitude=request.latitude,
+            longitude=request.longitude,
+            advisory_layers=result.get("advisory_layers", result),
+            timing=result.get("timing") if request.include_timing else None,
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/range", summary="Get advisory data for time range")
-async def get_advisory_range(request: AdvisoryRangeRequest):
+@router.post("/range", summary="Get advisory data for time range", response_model=AdvisoryRangeResponse)
+async def get_advisory_range(request: AdvisoryRangeRequest) -> AdvisoryRangeResponse:
     """Get advisory snapshots over a time range.
 
     Samples advisory data at regular intervals across the specified range.
@@ -103,13 +117,13 @@ async def get_advisory_range(request: AdvisoryRangeRequest):
             longitude=request.longitude,
         )
 
-        return {
-            "start": request.start_time.isoformat(),
-            "end": request.end_time.isoformat(),
-            "interval_minutes": request.interval_minutes,
-            "count": len(snapshots),
-            "snapshots": snapshots,
-        }
+        return AdvisoryRangeResponse(
+            start=request.start_time.isoformat(),
+            end=request.end_time.isoformat(),
+            interval_minutes=request.interval_minutes,
+            count=len(snapshots),
+            snapshots=snapshots,
+        )
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -117,22 +131,28 @@ async def get_advisory_range(request: AdvisoryRangeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/features", summary="Get feature flag status")
-async def get_feature_status():
+@router.get("/features", summary="Get feature flag status", response_model=FeatureStatusResponse)
+async def get_feature_status() -> FeatureStatusResponse:
     """Get current status of advisory feature flags.
 
     Shows which advisory modules are enabled, available, and their configuration.
     """
     try:
         service = get_advisory_service()
-        return service.get_feature_status()
+        status_data = service.get_feature_status()
+        
+        return FeatureStatusResponse(
+            enabled=status_data.get("enabled", []),
+            available=status_data.get("available", []),
+            configuration=status_data.get("configuration", {}),
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/ruling-planets", summary="Calculate KP Ruling Planets")
-async def calculate_ruling_planets(request: RulingPlanetsRequest):
+@router.post("/ruling-planets", summary="Calculate KP Ruling Planets", response_model=RulingPlanetsResponse)
+async def calculate_ruling_planets(request: RulingPlanetsRequest) -> RulingPlanetsResponse:
     """Calculate KP Ruling Planets for a given moment.
 
     Returns the ruling planets based on:
@@ -174,8 +194,8 @@ async def calculate_ruling_planets(request: RulingPlanetsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/shadbala", summary="Calculate Shadbala strength")
-async def calculate_shadbala(request: AdvisoryRequest):
+@router.post("/shadbala", summary="Calculate Shadbala strength", response_model=ShadbalaResponse)
+async def calculate_shadbala(request: AdvisoryRequest) -> ShadbalaResponse:
     """Calculate six-fold planetary strength (Shadbala).
 
     Returns strength components:
@@ -216,19 +236,25 @@ async def calculate_shadbala(request: AdvisoryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/health", summary="Advisory service health check")
-async def health_check():
+@router.get("/health", summary="Advisory service health check", response_model=AdvisoryHealthResponse)
+async def health_check() -> AdvisoryHealthResponse:
     """Check advisory service health and configuration."""
     try:
         service = get_advisory_service()
         status = service.get_feature_status()
 
-        return {
-            "status": "healthy",
-            "enabled_count": len(status["enabled"]),
-            "available_count": len(status["available"]),
-            "features": status["enabled"],
-        }
+        return AdvisoryHealthResponse(
+            status="healthy",
+            enabled_count=len(status["enabled"]),
+            available_count=len(status["available"]),
+            features=status["enabled"],
+        )
 
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        return AdvisoryHealthResponse(
+            status="unhealthy",
+            enabled_count=0,
+            available_count=0,
+            features=[],
+            error=str(e),
+        )

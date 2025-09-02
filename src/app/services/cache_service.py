@@ -2,6 +2,9 @@
 """
 Cache service for storing computed results
 Uses JSON files for simplicity, can be replaced with Redis later
+
+DEPRECATED: Use unified_cache.py for new code - provides environment-driven
+Redis (production) vs file cache (development) selection per PM requirements.
 """
 
 import asyncio

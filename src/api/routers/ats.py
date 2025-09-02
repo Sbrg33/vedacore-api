@@ -16,6 +16,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.services.ats_service import ATSService
 from config.feature_flags import require_feature
+from api.models.responses import (
+    ATSBatchResponse,
+    ATSConfigResponse,
+    ATSValidationResponse,
+    ATSStatusResponse,
+    ATSContextsResponse,
+)
 
 # Initialize router following project conventions
 router = APIRouter(prefix="/api/v1/ats", tags=["ATS"])
@@ -145,9 +152,9 @@ async def calculate_transit(request: ATSTransitRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/batch")
+@router.post("/batch", response_model=ATSBatchResponse)
 @require_feature("ats")
-async def calculate_batch(request: ATSBatchRequest):
+async def calculate_batch(request: ATSBatchRequest) -> ATSBatchResponse:
     """
     Calculate ATS scores for a time range
 
@@ -169,46 +176,53 @@ async def calculate_batch(request: ATSBatchRequest):
             interval_minutes=request.interval_minutes,
             targets=request.targets,
         )
-        return {"results": results, "count": len(results)}
+        return ATSBatchResponse(results=results, count=len(results))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/config")
+@router.get("/config", response_model=ATSConfigResponse)
 @require_feature("ats")
-async def get_config():
+async def get_config() -> ATSConfigResponse:
     """
     Get current ATS configuration
 
     Returns context file, default targets, and other metadata.
     """
     try:
-        return service.get_context()
+        context = service.get_context()
+        return ATSConfigResponse(context=context)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/validate")
+@router.get("/validate", response_model=ATSValidationResponse)
 @require_feature("ats")
 async def validate_scores(
     timestamp: datetime | None = Query(
         default=None, description="UTC timestamp to validate (defaults to current time)"
     )
-):
+) -> ATSValidationResponse:
     """
     Validate ATS scores for correctness
 
     Checks score ranges, computation time, and other constraints.
     """
     try:
-        return service.validate_scores(timestamp)
+        result = service.validate_scores(timestamp)
+        return ATSValidationResponse(
+            valid=result.get("valid", False),
+            scores=result.get("scores", {}),
+            computation_time_ms=result.get("computation_time_ms", 0.0),
+            timestamp=timestamp or datetime.now(),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/status")
+@router.get("/status", response_model=ATSStatusResponse)
 @require_feature("ats")
-async def get_status():
+async def get_status() -> ATSStatusResponse:
     """
     Get ATS system status
 
@@ -218,24 +232,26 @@ async def get_status():
         # Try a test calculation
         test_result = service.get_scores()
 
-        return {
-            "status": "healthy",
-            "adapter_version": service.adapter.version,
-            "context_file": service.adapter.context_yaml,
-            "cache_ttl": service.cache_ttl,
-            "test_calculation": {
+        return ATSStatusResponse(
+            status="healthy",
+            adapter_version=service.adapter.version,
+            context_file=service.adapter.context_yaml,
+            cache_ttl=service.cache_ttl,
+            test_calculation={
                 "success": True,
                 "compute_ms": test_result.get("compute_ms", 0),
                 "cache_hit": test_result.get("cache_hit", False),
             },
-        }
+        )
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "adapter_version": getattr(service.adapter, "version", "unknown"),
-            "test_calculation": {"success": False, "error": str(e)},
-        }
+        return ATSStatusResponse(
+            status="unhealthy",
+            adapter_version=getattr(service.adapter, "version", "unknown"),
+            context_file=getattr(service.adapter, "context_yaml", "unknown"),
+            cache_ttl=getattr(service, "cache_ttl", 0),
+            test_calculation={"success": False, "error": str(e)},
+            error=str(e),
+        )
 
 
 # Backward compatibility endpoints (will deprecate)
@@ -246,9 +262,9 @@ async def health_check():
     return await get_status()
 
 
-@router.get("/contexts")
+@router.get("/contexts", response_model=ATSContextsResponse)
 @require_feature("ats")
-async def list_contexts():
+async def list_contexts() -> ATSContextsResponse:
     """List available ATS contexts"""
     import os
 
@@ -261,7 +277,7 @@ async def list_contexts():
                 name = file.replace(".yaml", "")
                 contexts.append({"name": name, "file": file})
 
-    return {
-        "contexts": contexts,
-        "current": os.path.basename(service.adapter.context_yaml),
-    }
+    return ATSContextsResponse(
+        contexts=contexts,
+        current=os.path.basename(service.adapter.context_yaml),
+    )

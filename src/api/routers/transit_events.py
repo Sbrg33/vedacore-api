@@ -20,6 +20,12 @@ from refactor.transit_gate_system import KPGateCalculator, compute_dispositor_ma
 from refactor.transit_moon_engine import get_moon_engine
 from refactor.transit_promise_checker import TransitPromiseChecker
 from refactor.transit_resonance import get_resonance_kernel
+from api.models.responses import (
+    TransitConfigResponse,
+    TransitGatesResponse,
+    TransitHealthResponse,
+    TransitPromiseCheckResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -271,12 +277,12 @@ async def get_moon_triggers(request: MoonTriggersRequest) -> EventResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/gates")
+@router.get("/gates", response_model=TransitGatesResponse)
 @require_feature(FeatureFlags.ENABLE_MOON_GATES)
 async def get_gates(
     ts: datetime = Query(..., description="UTC timestamp"),
     show_all: bool = Query(False, description="Show all planets"),
-) -> dict:
+) -> TransitGatesResponse:
     """
     Get current gate values for all planets.
 
@@ -324,21 +330,21 @@ async def get_gates(
         # Sort by gate score
         gates_list.sort(key=lambda x: x["gate_score"], reverse=True)
 
-        return {
-            "timestamp": ts.isoformat(),
-            "moon_chain": moon_chain.to_dict(),
-            "gates": gates_list,
-            "strongest": gates_list[0] if gates_list else None,
-        }
+        return TransitGatesResponse(
+            timestamp=ts.isoformat(),
+            moon_chain=moon_chain.to_dict(),
+            gates=gates_list,
+            strongest=gates_list[0] if gates_list else None,
+        )
 
     except Exception as e:
         logger.error(f"Error getting gates: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/promise-check")
+@router.post("/promise-check", response_model=TransitPromiseCheckResponse)
 @require_feature(FeatureFlags.ENABLE_PROMISE_CHECK)
-async def check_promise(request: PromiseCheckRequest) -> dict:
+async def check_promise(request: PromiseCheckRequest) -> TransitPromiseCheckResponse:
     """
     Check birth chart promise for themes.
 
@@ -370,21 +376,21 @@ async def check_promise(request: PromiseCheckRequest) -> dict:
         if request.planet_id:
             all_themes = checker.get_all_themes_for_planet(request.planet_id)
 
-        return {
-            "promise_results": results,
-            "planet_themes": all_themes if request.planet_id else None,
-        }
+        return TransitPromiseCheckResponse(
+            promise_results=results,
+            planet_themes=all_themes if request.planet_id else None,
+        )
 
     except Exception as e:
         logger.error(f"Error checking promise: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/config")
-async def get_config() -> dict:
+@router.get("/config", response_model=TransitConfigResponse)
+async def get_config() -> TransitConfigResponse:
     """Get current transit event configuration and feature flags."""
-    return {
-        "features": {
+    return TransitConfigResponse(
+        features={
             "transit_events": FeatureFlags.ENABLE_TRANSIT_EVENTS,
             "moon_gates": FeatureFlags.ENABLE_MOON_GATES,
             "resonance_kernels": FeatureFlags.ENABLE_RESONANCE_KERNELS,
@@ -393,27 +399,27 @@ async def get_config() -> dict:
             "dasha_sync": FeatureFlags.ENABLE_DASHA_SYNC,
             "rp_confirm": FeatureFlags.ENABLE_RP_CONFIRM,
         },
-        "thresholds": {
+        thresholds={
             "fire_threshold": 60,
             "up_threshold": 75,
             "cooldown_minutes": 10,
         },
-        "weights": {"gate": 0.55, "kernel": 0.25, "confirm": 0.20},
-    }
+        weights={"gate": 0.55, "kernel": 0.25, "confirm": 0.20},
+    )
 
 
-@router.get("/health")
-async def health_check() -> dict:
+@router.get("/health", response_model=TransitHealthResponse)
+async def health_check() -> TransitHealthResponse:
     """Health check for transit event system."""
     try:
         # Test basic functionality
         moon_engine = get_moon_engine()
         current_chain = moon_engine.get_moon_chain(datetime.now(UTC))
 
-        return {
-            "status": "healthy",
-            "moon_chain": current_chain.get_signature(),
-            "cache_stats": moon_engine.get_cache_stats(),
-        }
+        return TransitHealthResponse(
+            status="healthy",
+            moon_chain=current_chain.get_signature(),
+            cache_stats=moon_engine.get_cache_stats(),
+        )
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        return TransitHealthResponse(status="unhealthy", error=str(e))

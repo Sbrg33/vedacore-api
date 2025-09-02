@@ -14,6 +14,7 @@ from app.core.session import in_session
 from app.core.timeframes import iter_slices
 from app.models.requests import IntradayRequest
 from app.models.responses import IntradaySlice
+from api.models.responses import SignalsHealthResponse
 from app.services.amd_engine import AMDPhaseDetector
 from app.services.cache_service import CacheService
 from app.services.facade_adapter import FacadeAdapter
@@ -164,7 +165,7 @@ async def get_intraday_signals(
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/health")
-async def signals_health():
+@router.get("/health", response_model=SignalsHealthResponse)
+async def signals_health() -> SignalsHealthResponse:
     """Health check for signals router"""
-    return {"status": "healthy", "service": "signals"}
+    return SignalsHealthResponse(status="healthy", service="signals")
