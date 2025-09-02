@@ -56,6 +56,20 @@ setup_logging(
 )
 logger = get_api_logger("main")
 
+# Guard: warn if environment points to obsolete monorepo paths
+try:
+    import sys
+    _pp = os.getenv("PYTHONPATH", "")
+    if "/home/sb108/projects/vedacore" in _pp or any(
+        "/home/sb108/projects/vedacore" in p for p in sys.path
+    ):
+        logger.warning(
+            "⚠️ Detected legacy PYTHONPATH entry for /home/sb108/projects/vedacore. "
+            "This monorepo is deprecated; remove it to avoid accidental cross-imports."
+        )
+except Exception:
+    pass
+
 # V1 API routers (conditional based on feature flag)
 try:
     from api.routers.v1 import (
