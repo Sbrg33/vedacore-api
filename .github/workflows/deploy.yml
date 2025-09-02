@@ -94,20 +94,27 @@ jobs:
             : ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS not set}
             # Login to GHCR (read:packages token)
             docker login ghcr.io -u "$GHCR_USERNAME" -p "$GHCR_TOKEN"
-            # Ensure firewall allows origin ports (no-op if ufw not installed)
+            # SECURITY FIX: Ensure firewall blocks direct container access
             if command -v sudo >/dev/null 2>&1 && command -v ufw >/dev/null 2>&1; then \
-              echo "Configuring UFW firewall rules..."; \
+              echo "Configuring UFW firewall rules (SECURITY HARDENED)..."; \
               # Keep SSH accessible
               sudo ufw allow 22/tcp || true; \
-              # Allow production HTTP and optional HTTPS
+              # Allow Cloudflare proxy ports only
               sudo ufw allow 80/tcp || true; \
               sudo ufw allow 443/tcp || true; \
-              # Allow the mapped app port (staging may use 8000)
-              if [ "${PORT}" != "80" ]; then sudo ufw allow ${PORT}/tcp || true; fi; \
+              # CRITICAL: Block direct container access for production
+              if [ "${PORT}" = "80" ]; then \
+                echo "🔒 PRODUCTION: Blocking direct port 8000 access"; \
+                sudo ufw deny 8000/tcp || true; \
+              else \
+                echo "📍 STAGING: Allowing direct port ${PORT} access"; \
+                sudo ufw allow ${PORT}/tcp || true; \
+              fi; \
               # Enable UFW on reboot and now
               sudo systemctl enable ufw || true; \
               sudo ufw --force enable || true; \
               sudo ufw reload || true; \
+              echo "✅ Firewall configured: Allow 22,80,443 | Block 8000 for production"; \
             fi
             # Stop Apache and nginx to ensure port 80 is available
             systemctl stop apache2 || true
