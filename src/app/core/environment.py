@@ -139,8 +139,9 @@ DATABASE_URL=postgresql://postgres:devpass@localhost:5432/postgres
 PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
 RATE_LIMIT_ENABLED=1
 
-# Optional: Debug
-PYTHONPATH=/home/sb108/projects/vedacore
+# Optional: Debug (keep app-local imports only)
+# PYTHONPATH can be set per-shell if needed; recommended default is repo-local
+PYTHONPATH=./src:.
 RUST_LOG=debug
 """
 

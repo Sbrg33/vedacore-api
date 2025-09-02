@@ -29,19 +29,33 @@ _current_ayanamsa = None
 
 # Set ephemeris path and Krishnamurti ayanamsa ONCE at module import
 from pathlib import Path
+import os
 
-# Find ephemeris path
+# Resolve ephemeris path with environment override and safe defaults
 ephemeris_path = None
-possible_paths = [
-    Path(__file__).parent.parent / "swisseph" / "ephe",
-    Path("/home/sb108/projects/vedacore/swisseph/ephe"),
-    Path("/home/sb108/projects/master_ephe/swisseph/ephe"),
-]
+possible_paths = []
+
+# 1) Environment overrides (support both common names)
+for env_var in ("SWE_EPH_PATH", "SWISSEPH_EPHE_PATH", "SWISSEPH_PATH"):
+    v = os.getenv(env_var)
+    if v:
+        possible_paths.append(Path(v))
+
+# 2) Project-local swisseph data
+project_root = Path(__file__).resolve().parents[2]
+possible_paths.append(project_root / "swisseph" / "ephe")
+
+# 3) Common container/app paths
+possible_paths.append(Path("/app/swisseph/ephe"))
+possible_paths.append(Path.cwd() / "swisseph" / "ephe")
 
 for path in possible_paths:
-    if path.exists():
-        ephemeris_path = str(path)
-        break
+    try:
+        if path.exists():
+            ephemeris_path = str(path)
+            break
+    except Exception:
+        continue
 
 with _swe_lock:
     # Set ephemeris path if found
