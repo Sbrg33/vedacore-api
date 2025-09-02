@@ -183,13 +183,13 @@ async def readiness_check() -> ReadinessResponse:
         warnings=warnings if warnings else None,
     )
 
-    # Return appropriate status code
+    # Return with appropriate status code - FastAPI handles Pydantic serialization
     if critical_failures:
         return JSONResponse(
-            content=response.model_dump(), status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            content=response.model_dump(mode='json'), status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )
     else:
-        return JSONResponse(content=response.model_dump(), status_code=status.HTTP_200_OK)
+        return response
 
 
 @router.get("/health/metrics", response_model=MetricsResponse)
@@ -393,10 +393,10 @@ async def startup_check() -> StartupResponse:
         warnings=warning_list if warning_list else None,
     )
 
-    # Return with appropriate status
+    # Return with appropriate status - FastAPI handles Pydantic serialization
     if critical_failures:
         return JSONResponse(
-            content=response.model_dump(), status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            content=response.model_dump(mode='json'), status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )
     else:
-        return JSONResponse(content=response.model_dump(), status_code=status.HTTP_200_OK)
+        return response
