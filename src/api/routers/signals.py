@@ -17,7 +17,7 @@ from app.models.requests import IntradayRequest
 from app.models.responses import IntradaySlice
 from api.models.responses import SignalsHealthResponse
 from app.services.amd_engine import AMDPhaseDetector
-from app.services.cache_service import CacheService
+from app.services.unified_cache import UnifiedCache
 from app.services.facade_adapter import FacadeAdapter
 from refactor.monitoring import Timer
 
@@ -26,9 +26,9 @@ router = APIRouter(prefix="/signals", tags=["signals"], responses=DEFAULT_ERROR_
 
 
 # Dependency injection
-async def get_cache() -> CacheService:
+async def get_cache() -> UnifiedCache:
     """Get cache service instance"""
-    return CacheService()
+    return UnifiedCache()
 
 
 async def get_facade() -> FacadeAdapter:
@@ -49,7 +49,7 @@ async def get_amd() -> AMDPhaseDetector:
 )
 async def get_intraday_signals(
     request: IntradayRequest,
-    cache: CacheService = Depends(get_cache),
+    cache: UnifiedCache = Depends(get_cache),
     facade: FacadeAdapter = Depends(get_facade),
     amd: AMDPhaseDetector = Depends(get_amd),
 ) -> list[IntradaySlice]:

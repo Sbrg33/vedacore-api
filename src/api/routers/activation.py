@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -45,7 +46,7 @@ from modules.sky_state_service import get_sky_state
 # Feature flag check
 ACTIVATION_ENABLED = os.getenv("ACTIVATION_ENABLED", "false").lower() == "true"
 
-router = APIRouter(tags=["activation"])
+router = APIRouter(tags=["activation"], responses=DEFAULT_ERROR_RESPONSES)
 logger = logging.getLogger(__name__)
 
 # Import streaming metrics
@@ -699,7 +700,14 @@ def _check_feature_flag():
         )
 
 
-@router.get("/activation", response_model=dict[str, Any])
+from api.models.responses import ActivationResponse
+
+
+@router.get(
+    "/activation",
+    response_model=ActivationResponse,
+    operation_id="activation_get",
+)
 async def get_activation(
     request: Request,
     response: Response,
@@ -827,7 +835,11 @@ async def get_activation(
         raise HTTPException(500, f"Activation computation failed: {e}") from e
 
 
-@router.post("/activation", response_model=dict[str, Any])
+@router.post(
+    "/activation",
+    response_model=ActivationResponse,
+    operation_id="activation_post",
+)
 async def post_activation(request: Request, response: Response, req: ActivationRequest):
     """POST endpoint for activation field calculation."""
     _check_feature_flag()

@@ -175,12 +175,16 @@ async def calculate_horary(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+from api.models.responses import ServiceHealthResponse
+
+
 @router.get(
     "/health",
+    response_model=ServiceHealthResponse,
     summary="KP Horary health",
     operation_id="kpHorary_health",
 )
-async def health_check():
+async def health_check() -> ServiceHealthResponse:
     """Health check for Horary service"""
     status = {
         "service": "kp_horary",

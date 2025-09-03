@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from app.core.config import NY_TZ
 from app.core.timeframes import iter_slices
-from app.services.cache_service import CacheService
+from app.services.unified_cache import UnifiedCache
 from app.services.facade_adapter import FacadeAdapter
 from api.services.redis_config import RedisManager, get_redis
 from refactor.monitoring import Timer
@@ -166,7 +166,7 @@ class EnhancedSignalsService:
     """
     
     def __init__(self):
-        self.cache_service = CacheService(system="ENHANCED_SIGNALS")
+        self.cache_service = UnifiedCache(system="ENHANCED_SIGNALS")
         self.facade_adapter = FacadeAdapter()
         self.confluence_detector = ConfluenceDetector()
         self.redis_manager: Optional[RedisManager] = None

@@ -18,6 +18,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field, field_validator
+from api.models.responses import LocationFeaturesResponse
 
 from app.services.atlas_service import get_by_id as _atlas_get_by_id
 from app.services.atlas_service import load_atlas as _load_atlas
@@ -191,7 +192,7 @@ class FeaturesPostRequest(BaseModel):
 
 @router.get(
     "/features",
-    response_model=dict[str, Any],
+    response_model=LocationFeaturesResponse,
     summary="Get location features",
     operation_id="location_getFeatures",
 )
@@ -398,7 +399,7 @@ async def get_location_features(
 
 @router.post(
     "/features",
-    response_model=dict[str, Any],
+    response_model=LocationFeaturesResponse,
     summary="Post location features",
     operation_id="location_postFeatures",
 )

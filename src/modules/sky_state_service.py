@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, NamedTuple
 
-from app.services.cache_service import CacheService
+from app.services.unified_cache import UnifiedCache
 from constants.activation_model import (
     CACHE_TTL_SKY_STATE,
     ECLIPSE_EXACT_CORRIDOR_DEG,
@@ -218,7 +218,7 @@ async def get_sky_state(
 
     start_time = time.perf_counter()
 
-    cache = CacheService(system="GLR_SKY_STATE")
+    cache = UnifiedCache(system="GLR_SKY_STATE")
     cache_key = (
         f"sky_state:{get_model_fingerprint(model_profile)}:{ts_eff_minute.isoformat()}"
     )

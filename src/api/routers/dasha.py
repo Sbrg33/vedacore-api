@@ -173,6 +173,7 @@ from api.models.responses import (
     DashaChangeEvent,
     DashaCycleResponse,
     DashaBirthBalanceResponse,
+    DashaSystemsResponse,
 )
 
 
@@ -495,10 +496,11 @@ async def get_birth_balance(
 
 @router.get(
     "/dasha/systems",
+    response_model=DashaSystemsResponse,
     summary="List supported dasha systems",
     operation_id="dasha_systems",
 )
-async def list_dasha_systems() -> dict[str, Any]:
+async def list_dasha_systems() -> DashaSystemsResponse:
     """
     List available dasha systems and their capabilities.
     """

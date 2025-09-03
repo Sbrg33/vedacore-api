@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/%40vedacore%2Fapi.svg)](https://www.npmjs.com/package/@vedacore/api)
 [![PyPI](https://img.shields.io/pypi/v/vedacore-api.svg)](https://pypi.org/project/vedacore-api/)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-1.0.0-blue.svg)](./openapi.json)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-1.1.0-blue.svg)](./openapi.json)
 
 [![npm next](https://img.shields.io/npm/v/%40vedacore%2Fapi/next.svg?label=npm%40next)](https://www.npmjs.com/package/@vedacore/api?activeTab=versions)
 [![PyPI pre](https://img.shields.io/pypi/v/vedacore-api.svg?label=pypi%20pre&include_prereleases)](https://pypi.org/project/vedacore-api/#history)
@@ -72,6 +72,9 @@ curl -fsS http://localhost:8000/api/v1/health/up
 Auth options:
 - JWKS: set `AUTH_JWKS_URL` (add `AUTH_AUDIENCE`/`AUTH_ISSUER` as needed)
 - HS256: set `AUTH_JWT_SECRET` (min 32 chars)
+
+All REST endpoints require authentication. Use `Authorization: Bearer <jwt>` for REST.
+For SSE/WS, use `?token=<jwt>` as query parameter (browser-compatible).
 
 CORS rules:
 - In production, origins must be explicit and include protocol; startup fails on misconfig.

@@ -4,7 +4,7 @@ VedaCore Signals API - Main Application
 FastAPI application for KP ephemeris-based trading signals
 """
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, JSONResponse
 
@@ -49,6 +49,8 @@ from app.core.environment import get_complete_config
 from refactor.monitoring import set_feature_flag, setup_prometheus_metrics
 from config.feature_flags import get_feature_flags
 from api.models.responses import Problem
+from api.services.auth import require_jwt_header_or_query, AuthContext
+from api.services.rate_limiter import check_qps_limit
 from fastapi.openapi.utils import get_openapi
 
 # Initialize structured logging EARLY (before any logger usage)
@@ -627,10 +629,10 @@ elif config.feature_v1_routing:
 # Include V1 routers if feature flag is enabled and routers are available
 if config.feature_v1_routing and V1_ROUTERS_AVAILABLE:
     logger.info("🚀 Mounting V1 API routes")
-    app.include_router(jyotish_router)  # V1: Core Vedic calculations
-    app.include_router(kp_router)  # V1: KP-specific calculations  
-    app.include_router(ref_router)  # V1: Reference data
-    app.include_router(atlas_v1_router)  # V1: Geographic resolution
+    app.include_router(jyotish_router, dependencies=[Depends(rest_qps_guard)])  # V1: Core Vedic calculations
+    app.include_router(kp_router, dependencies=[Depends(rest_qps_guard)])  # V1: KP-specific calculations  
+    app.include_router(ref_router, dependencies=[Depends(rest_qps_guard)])  # V1: Reference data
+    app.include_router(atlas_v1_router, dependencies=[Depends(rest_qps_guard)])  # V1: Geographic resolution
     app.include_router(auth_router)  # V1: Authentication (streaming tokens)
     app.include_router(stream_v1_router)  # V1: Unified streaming
     app.include_router(legacy_shim_router)  # Legacy route compatibility
@@ -638,35 +640,47 @@ if config.feature_v1_routing and V1_ROUTERS_AVAILABLE:
 else:
     logger.info("📡 Mounting legacy API routes")
 
+# REST QPS guard: enforce per-tenant request rate limits on REST endpoints
+async def rest_qps_guard(auth: AuthContext = Depends(require_jwt_header_or_query)):
+    await check_qps_limit(auth.require_tenant())
+
 # Include legacy routers (always available for backward compatibility)
 app.include_router(health_router, prefix="/api/v1")
-app.include_router(signals_router, prefix="/api/v1")
-app.include_router(enhanced_signals_router, prefix="/api/v1")  # Enhanced KP timing signals
-app.include_router(houses_router, prefix="/api/v1")
-app.include_router(location_router, prefix="/api/v1/location")
-app.include_router(dasha_router)
-app.include_router(nodes_router)
-app.include_router(eclipse_router)
-app.include_router(moon_router)
-app.include_router(micro_router)  # Phase 8: Micro-timing
-app.include_router(strategy_router)  # Phase 9: Strategy
-app.include_router(advisory_router)  # Phase 11: Advisory layers
-app.include_router(tara_router)  # KP: Tara Bala
-app.include_router(fortuna_router)  # KP: Fortuna Points
-app.include_router(transit_events_router)  # Transit Event System
+app.include_router(
+    signals_router, prefix="/api/v1", dependencies=[Depends(rest_qps_guard)]
+)
+app.include_router(
+    enhanced_signals_router, prefix="/api/v1", dependencies=[Depends(rest_qps_guard)]
+)  # Enhanced KP timing signals
+app.include_router(
+    houses_router, prefix="/api/v1", dependencies=[Depends(rest_qps_guard)]
+)
+app.include_router(
+    location_router, prefix="/api/v1/location", dependencies=[Depends(rest_qps_guard)]
+)
+app.include_router(dasha_router, dependencies=[Depends(rest_qps_guard)])
+app.include_router(nodes_router, dependencies=[Depends(rest_qps_guard)])
+app.include_router(eclipse_router, dependencies=[Depends(rest_qps_guard)])
+app.include_router(moon_router, dependencies=[Depends(rest_qps_guard)])
+app.include_router(micro_router, dependencies=[Depends(rest_qps_guard)])  # Phase 8: Micro-timing
+app.include_router(strategy_router, dependencies=[Depends(rest_qps_guard)])  # Phase 9: Strategy
+app.include_router(advisory_router, dependencies=[Depends(rest_qps_guard)])  # Phase 11: Advisory layers
+app.include_router(tara_router, dependencies=[Depends(rest_qps_guard)])  # KP: Tara Bala
+app.include_router(fortuna_router, dependencies=[Depends(rest_qps_guard)])  # KP: Fortuna Points
+app.include_router(transit_events_router, dependencies=[Depends(rest_qps_guard)])  # Transit Event System
 # Always include ATS router; endpoints gated by feature flag to return 403 when disabled
-app.include_router(ats_router)  # ATS: Aspect-Transfer Scoring
-app.include_router(panchanga_router)  # Panchanga: SystemAdapter registry demo
-app.include_router(kp_horary_router)  # KP: Horary Numbers (1-249)
-app.include_router(kp_ruling_planets_router)  # KP: Ruling Planets System
+app.include_router(ats_router, dependencies=[Depends(rest_qps_guard)])  # ATS: Aspect-Transfer Scoring
+app.include_router(panchanga_router, dependencies=[Depends(rest_qps_guard)])  # Panchanga: SystemAdapter registry demo
+app.include_router(kp_horary_router, dependencies=[Depends(rest_qps_guard)])  # KP: Horary Numbers (1-249)
+app.include_router(kp_ruling_planets_router, dependencies=[Depends(rest_qps_guard)])  # KP: Ruling Planets System
 app.include_router(stream_router)  # Streaming: SSE endpoints
 app.include_router(ws_router)  # Streaming: WebSocket endpoints
-app.include_router(atlas_router)  # Atlas: City search/resolution
+app.include_router(atlas_router, dependencies=[Depends(require_jwt_header_or_query)])  # Atlas: City search/resolution
 
 # Global Locality Research - Activation API (if enabled)
 if ACTIVATION_ENABLED:
     app.include_router(
-        activation_router, prefix="/api/v1/location"
+        activation_router, prefix="/api/v1/location", dependencies=[Depends(rest_qps_guard)]
     )  # GLR: Activation field mapping
     logger.info("Activation router mounted at /api/v1/location/activation")
 

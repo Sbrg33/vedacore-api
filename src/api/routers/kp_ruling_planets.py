@@ -199,12 +199,16 @@ async def compute_ruling_planets(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+from api.models.responses import WeekdayInfoResponse, AdapterSchemaResponse
+
+
 @router.get(
     "/weekday-info/{weekday_idx}",
+    response_model=WeekdayInfoResponse,
     summary="Weekday info",
     operation_id="kpRP_weekdayInfo",
 )
-async def get_weekday_info(weekday_idx: int):
+async def get_weekday_info(weekday_idx: int) -> WeekdayInfoResponse:
     """
     Get information about a specific weekday.
 
@@ -243,10 +247,11 @@ async def get_weekday_info(weekday_idx: int):
 
 @router.get(
     "/schema",
+    response_model=AdapterSchemaResponse,
     summary="RP schema",
     operation_id="kpRP_schema",
 )
-async def get_schema():
+async def get_schema() -> AdapterSchemaResponse:
     """Get API schema for Ruling Planets endpoints"""
     if advisory_registry is None:
         raise HTTPException(status_code=500, detail="Adapter registry not available")

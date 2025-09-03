@@ -112,8 +112,8 @@ class HousesResponse(BaseModel):
     operation_id="houses_calculate",
 )
 async def compute_houses_endpoint(req: HousesRequest):
-    # Import cache service
-    from app.services.cache_service import CacheService
+    # Import unified cache service (Redis in production, file in dev)
+    from app.services.unified_cache import UnifiedCache
 
     # Record request metric
     houses_requests_total.labels(
@@ -132,7 +132,7 @@ async def compute_houses_endpoint(req: HousesRequest):
     cache_key = f"HOUSES:{req.house_system}:{req.latitude:.4f}:{req.longitude:.4f}:{ts_minute.isoformat()}:{req.topocentric}"
 
     # Initialize cache service for KP_HOUSES system
-    cache = CacheService(system="KP_HOUSES")
+    cache = UnifiedCache(system="KP_HOUSES")
 
     # Try to get from cache
     cached = await cache.get(cache_key)

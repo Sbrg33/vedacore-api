@@ -357,6 +357,30 @@ async def optional_jwt_query(
         return None
 
 
+# Combined dependency: accept Authorization header or token query param
+async def require_jwt_header_or_query(
+    authorization: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+) -> AuthContext:
+    """Require JWT via header or query param.
+
+    - REST clients typically send Authorization: Bearer <token>
+    - Browser EventSource/WebSocket send ?token=<jwt>
+    """
+    if authorization:
+        bearer = _parse_bearer(authorization)
+        try:
+            return _verifier.verify(bearer)
+        except AuthError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    if token:
+        try:
+            return _verifier.verify(token)
+        except AuthError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing_token")
+
+
 # -------------------- Utility Functions --------------------
 
 

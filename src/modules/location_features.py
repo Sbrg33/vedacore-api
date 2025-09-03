@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import HTTPException
 
 # Core VedaCore dependencies
-from app.services.cache_service import CacheService
+from app.services.unified_cache import UnifiedCache
 
 # Location features specific imports
 from constants.location_features import (
@@ -293,7 +293,7 @@ async def compute_location_features(
     ts_eff = _get_kp_effective_timestamp(ts, apply_kp_offset=True)
 
     # Initialize cache service
-    cache = CacheService(system="KP_HOUSES")
+    cache = UnifiedCache(system="KP_HOUSES")
 
     response = {
         "timestamp": ts.replace(microsecond=0).isoformat().replace("+00:00", "Z"),

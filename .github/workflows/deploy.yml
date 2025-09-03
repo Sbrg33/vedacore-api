@@ -24,20 +24,18 @@ on:
         description: "Run ATS symbol contract checks (true|false)"
         default: "true"
         required: false
-  # Auto-deploy when build & push succeeds on main
-  workflow_run:
-    workflows: ["Build & Push Image (GHCR)"]
-    types: [completed]
+  # Auto-deploy when build & push succeeds on main (via repository_dispatch)
+  repository_dispatch:
+    types: [build-complete]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Only auto-deploy successful runs on main, or any manual dispatch
+    # Deploy on manual dispatch or auto-deploy via repository_dispatch from main branch builds
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main')
+      (github.event_name == 'repository_dispatch' &&
+       github.event.action == 'build-complete')
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
       url: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging') && 'https://staging.api.vedacore.io' || 'https://api.vedacore.io' }}
@@ -51,11 +49,12 @@ jobs:
       - name: Compute image tag
         id: tag
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # Use long SHA tag published by build workflow (deterministic deploy)
-            echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          else
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            # Use SHA from build workflow via repository_dispatch payload
+            BUILD_SHA="${{ github.event.client_payload.sha }}"
+            echo "tag=sha-${BUILD_SHA}" >> "$GITHUB_OUTPUT"
+            echo "sha=${BUILD_SHA}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # Manual: prefer provided tag; if omitted, default to current run SHA
             if [ -n "${{ inputs.tag }}" ]; then
               echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
@@ -65,6 +64,10 @@ jobs:
               echo "tag=sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
               echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
             fi
+          else
+            # Fallback
+            echo "tag=sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Resolve REDIS_URL secret
@@ -211,9 +214,9 @@ except Exception:
       - name: Public API smoke test
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             PUBLIC_URL="https://api.vedacore.io"
-          else
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ inputs.public_url }}" ]; then
               PUBLIC_URL="${{ inputs.public_url }}"
             elif [ "${{ inputs.environment }}" = "staging" ]; then
@@ -221,6 +224,8 @@ except Exception:
             else
               PUBLIC_URL="https://api.vedacore.io"
             fi
+          else
+            PUBLIC_URL="https://api.vedacore.io"
           fi
           
           echo "🔍 Testing public readiness: $PUBLIC_URL/api/v1/health/ready"
@@ -239,7 +244,7 @@ except Exception:
             exit 1
           fi
 
-          if [ "${{ inputs.verify_symbols || 'true' }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_run" ]; then
+          if [ "${{ inputs.verify_symbols || 'true' }}" = "true" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "🔍 ATS symbols acceptance: [\"VEN\",\"MER\"] (should be 200)"
             if curl -fsS -X POST "$PUBLIC_URL/api/v1/ats/transit" \
                  -H 'accept: application/json' -H 'content-type: application/json' \

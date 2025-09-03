@@ -138,6 +138,158 @@ class VersionResponse(BaseModel):
 
 
 # =======================
+# Location Features Responses
+# =======================
+
+class Coordinates(BaseModel):
+    """Geographic coordinates for a location."""
+    lat: float = Field(..., description="Latitude in degrees")
+    lon: float = Field(..., description="Longitude in degrees")
+    elevation: float | None = Field(None, description="Elevation in meters if available")
+
+
+class Angles(BaseModel):
+    """Primary angles for a location."""
+    asc: float = Field(..., description="Ascendant ecliptic longitude")
+    mc: float = Field(..., description="Midheaven ecliptic longitude")
+    desc: float = Field(..., description="Descendant ecliptic longitude")
+    ic: float = Field(..., description="Imum Coeli ecliptic longitude")
+
+
+class LSTSegment(BaseModel):
+    """Local Sidereal Time segment descriptor."""
+    num: int = Field(..., description="Segment index 0-7")
+    label: str = Field(..., description="Human-friendly label for the segment")
+
+
+class DistToAngles(BaseModel):
+    """Great-circle distances to angles (degrees)."""
+    asc: float
+    mc: float
+    desc: float
+    ic: float
+
+
+class AspectToAngle(BaseModel):
+    """Aspect between planet and an angle (ASC/MC)."""
+    angle: str = Field(..., description="Target angle: asc|mc")
+    type: str = Field(..., description="Aspect type e.g. conj, opp, tri, sqr, sex")
+    orb: float = Field(..., description="Orb distance in degrees")
+    applying: bool = Field(..., description="Whether aspect is applying")
+
+
+class DeclinationInfo(BaseModel):
+    """Declination analysis information."""
+    mode: str = Field(..., description="Calculation mode: topo|geo")
+    dec_strength: float = Field(..., description="Declination strength [0,1]")
+    circumpolar: bool = Field(..., description="Circumpolar visibility flag")
+
+
+class TopoAltAz(BaseModel):
+    """Topocentric altitude/azimuth if computed."""
+    alt: float
+    az: float
+
+
+class PlanetFeature(BaseModel):
+    """Per-planet features at a location."""
+    model_config = ConfigDict(extra="allow")
+    house: int = Field(..., ge=1, le=12)
+    ecl_lon: float
+    ra: float
+    dec: float
+    dist_to_angles: DistToAngles
+    cusp_dist_deg: float
+    topo: TopoAltAz | None = None
+    above_horizon: bool | None = None
+    aspect_to_angles: list[AspectToAngle] = Field(default_factory=list)
+    declination: DeclinationInfo
+
+
+class DerivedIndices(BaseModel):
+    """Bounded indices summarizing local emphasis."""
+    angular_load: float
+    house_emphasis: dict[str, float]
+    aspect_to_angle_load: float
+    declinational_emphasis: float
+
+
+class LocationDerived(BaseModel):
+    aspect_to_angles: list[AspectToAngle] = Field(default_factory=list)
+    indices: DerivedIndices
+    declination: DeclinationInfo
+
+
+class LocationFeature(BaseModel):
+    """Full feature payload for a single location."""
+    model_config = ConfigDict(extra="allow")
+    id: str
+    name: str | None = None
+    coords: Coordinates
+    angles: Angles
+    houses: list[float]
+    lst_segment: LSTSegment
+    planets: dict[str, PlanetFeature]
+    derived: LocationDerived
+
+
+class LocationFeaturesResponse(BaseModel):
+    """Top-level container for location features computation."""
+    timestamp: str
+    locations: list[LocationFeature]
+
+
+# =======================
+# Activation Responses
+# =======================
+
+class ActivationDrivers(BaseModel):
+    planet: str | None = None
+    angle: str | None = None
+    kind: str | None = None
+    applying: bool | None = None
+
+
+class ActivationConfidence(BaseModel):
+    reliability_lat: float | None = None
+
+
+class ActivationStrength(BaseModel):
+    absolute: float
+    delta: float | None = None
+    exposure_weighted: float | None = None
+
+
+class ActivationLocation(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    id: str
+    name: str | None = None
+    lat: float
+    lon: float
+    activation: ActivationStrength
+    breakdown: Dict[str, float]
+    sun_cap: float | None = None
+    phase_multiplier: float | None = None
+    drivers: ActivationDrivers | Dict[str, Any]
+    flags: Dict[str, Any] | list[str] | None = None
+    confidence: ActivationConfidence | Dict[str, Any] | None = None
+
+
+class ActivationSky(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    moon: Dict[str, Any] | None = None
+    sun: Dict[str, Any] | None = None
+
+
+class ActivationResponse(BaseModel):
+    timestamp: str
+    model_version: str
+    model_profile: str
+    locations: list[ActivationLocation]
+    sky: ActivationSky | None = None
+
+
+# =======================
 # Streaming & WebSocket  
 # =======================
 
@@ -642,6 +794,15 @@ class HorarySignificatorsResponse(BaseModel):
     interpretation: str = Field(..., description="Guidance for use in KP")
 
 
+class ServiceHealthResponse(BaseModel):
+    service: str
+    status: str
+    registry_available: bool | None = None
+    timestamp: str
+    adapter_registered: bool | None = None
+    adapter_version: str | None = None
+
+
 # =======================
 # KP Analysis & Config Responses
 # =======================
@@ -655,6 +816,22 @@ class KPAnalysisResponse(BaseModel):
     timing: Optional[Dict[str, Any]] = Field(None, description="Timing analysis (dasha/transits)")
     context: Optional[Dict[str, Any]] = Field(None, description="Calculation context")
     summary: Optional[Dict[str, Any]] = Field(None, description="Summary and highlights")
+
+
+# =======================
+# KP RP & Small Utilities
+# =======================
+
+class WeekdayInfoResponse(BaseModel):
+    weekday_idx: int
+    weekday_name: str
+    day_lord: str
+    day_lord_name: str
+
+
+class AdapterSchemaResponse(BaseModel):
+    """Arbitrary adapter schema payload (permits extra fields)."""
+    model_config = ConfigDict(extra="allow")
 
 
 class KPHousePromisesResponse(BaseModel):
@@ -942,6 +1119,18 @@ class DashaBirthBalanceResponse(BaseModel):
     elapsed_portion: float
     remaining_portion: float
     compute_time_ms: float | None = None
+
+
+class DashaSystemInfo(BaseModel):
+    id: str
+    name: str
+    description: str
+    levels: List[str]
+    planets: List[str]
+
+
+class DashaSystemsResponse(BaseModel):
+    systems: List[Dict[str, Any]] | List[DashaSystemInfo]
 
 
 # =======================
