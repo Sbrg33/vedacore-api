@@ -1,0 +1,58 @@
+name: sdk-next
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '17 5 * * *'
+
+jobs:
+  build-publish-next:
+    runs-on: ubuntu-latest
+    env:
+      SPEC_URL: https://api.vedacore.io/api/openapi.json
+      VC_API_KEY: ${{ secrets.VC_API_KEY_STAGING }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch live spec
+        run: |
+          curl -fsSL -H "X-API-Key: $VC_API_KEY" "$SPEC_URL" -o openapi.json
+          test -s openapi.json || (echo "openapi.json empty" && exit 1)
+
+      - name: Derive next versions
+        id: ver
+        run: |
+          BASE=$(jq -r '.info.version' openapi.json)
+          DATE=$(date -u +%Y%m%d%H%M)
+          SHORT=${GITHUB_SHA::7}
+          echo "npm=${BASE}-next.${DATE}.${SHORT}" >> $GITHUB_OUTPUT
+          echo "py=${BASE}.dev${DATE}" >> $GITHUB_OUTPUT
+
+      - name: Generate TS SDK (next)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          docker run --rm -v "$PWD":/local openapitools/openapi-generator-cli:v7.6.0 generate \
+            -i /local/openapi.json -g typescript-fetch -o /local/sdk/ts \
+            -p useSingleRequestParameter=true,typescriptThreePlus=true,withSeparateModelsAndApi=true,npmName=@vedacore/api,npmVersion=${{ steps.ver.outputs.npm }}
+          cd sdk/ts
+          npm publish --access public --tag next
+
+      - name: Generate Python SDK (dev)
+        run: |
+          pipx install openapi-python-client==0.21.6
+          openapi-python-client generate --path openapi.json --output-path sdk/python
+          cd sdk/python
+          python - <<'PY'
+import tomllib
+import tomli_w
+from pathlib import Path
+pp = Path('pyproject.toml')
+data = tomllib.loads(pp.read_text('utf-8'))
+data['project']['version'] = '${{ steps.ver.outputs.py }}'
+pp.write_text(tomli_w.dumps(data), 'utf-8')
+PY
+          python -m build
+          twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}

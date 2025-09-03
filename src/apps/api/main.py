@@ -758,13 +758,18 @@ def custom_openapi():
         return app.openapi_schema
     schema = get_openapi(
         title=app.title,
-        version=os.getenv("VC_API_VERSION", "1.0.0"),
+        version=os.getenv("OPENAPI_VERSION", "1.0.0"),
         description=app.description,
         routes=app.routes,
     )
-    # Servers
-    public_url = os.getenv("PUBLIC_URL") or os.getenv("VEDACORE_URL") or "/"
-    schema["servers"] = [{"url": public_url}]
+    # Servers: prefer explicit override; else fallback by environment
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    public_url_env = os.getenv("OPENAPI_PUBLIC_URL") or os.getenv("VEDACORE_URL")
+    if not public_url_env:
+        public_url_fallback = "https://api.vedacore.io" if env == "production" else "/"
+    else:
+        public_url_fallback = public_url_env
+    schema["servers"] = [{"url": public_url_fallback}]
     # Contact and license
     schema.setdefault("info", {}).setdefault("contact", {})
     schema["info"]["contact"].update(
