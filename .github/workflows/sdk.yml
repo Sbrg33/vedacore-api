@@ -60,6 +60,13 @@ jobs:
         run: |
           OPENAPI_VERSION=$(jq -r '.info.version' openapi.json)
           echo "OPENAPI_VERSION=$OPENAPI_VERSION" >> $GITHUB_ENV
+      - name: Assert prod server URL present
+        run: |
+          URL=$(jq -r '.servers[0].url // empty' openapi.json)
+          if [ "$URL" != "https://api.vedacore.io" ]; then
+            echo "::error::servers[0].url must be https://api.vedacore.io for release builds (found: $URL)"
+            exit 1
+          fi
       - name: Assert tag version matches OpenAPI info.version
         run: |
           TAG_VERSION=${GITHUB_REF_NAME#sdk-v}

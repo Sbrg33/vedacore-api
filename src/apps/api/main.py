@@ -33,6 +33,7 @@ from api.routers.houses import router as houses_router
 from api.routers.kp_horary import router as kp_horary_router
 from api.routers.kp_ruling_planets import router as kp_ruling_planets_router
 from api.routers.location import router as location_router
+from api.routers.location_stream import router as location_stream_router
 from api.routers.micro import router as micro_router
 from api.routers.moon import router as moon_router
 from api.routers.nodes import router as nodes_router
@@ -59,6 +60,10 @@ setup_logging(
     format_json=os.getenv("LOG_FORMAT", "json").lower() == "json",
 )
 logger = get_api_logger("main")
+
+# REST QPS guard: enforce per-tenant request rate limits on REST endpoints
+async def rest_qps_guard(auth: AuthContext = Depends(require_jwt_header_or_query)):
+    await check_qps_limit(auth.require_tenant())
 
 # Guard: warn if environment points to obsolete monorepo paths
 try:
@@ -676,6 +681,7 @@ app.include_router(kp_ruling_planets_router, dependencies=[Depends(rest_qps_guar
 app.include_router(stream_router)  # Streaming: SSE endpoints
 app.include_router(ws_router)  # Streaming: WebSocket endpoints
 app.include_router(atlas_router, dependencies=[Depends(require_jwt_header_or_query)])  # Atlas: City search/resolution
+app.include_router(location_stream_router)  # Location features SSE stream
 
 # Global Locality Research - Activation API (if enabled)
 if ACTIVATION_ENABLED:

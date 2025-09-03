@@ -34,8 +34,7 @@ from ..services.stream_manager import stream_manager
 
 # Import metrics for monitoring
 try:
-from ..services.metrics import streaming_metrics
-
+    from ..services.metrics import streaming_metrics
     METRICS_AVAILABLE = True
 except ImportError:
     METRICS_AVAILABLE = False

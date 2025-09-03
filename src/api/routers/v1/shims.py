@@ -107,11 +107,11 @@ class LegacyShimRouter:
     def _create_shim(self, old_path: str, new_path: str):
         """Create individual route shim."""
         
-        @self.router.get(old_path)
-        @self.router.post(old_path)
-        @self.router.put(old_path) 
-        @self.router.patch(old_path)
-        @self.router.delete(old_path)
+        @self.router.get(old_path, include_in_schema=False)
+        @self.router.post(old_path, include_in_schema=False)
+        @self.router.put(old_path, include_in_schema=False)
+        @self.router.patch(old_path, include_in_schema=False)
+        @self.router.delete(old_path, include_in_schema=False)
         async def legacy_handler(request: Request):
             """Handle legacy route with deprecation."""
             
