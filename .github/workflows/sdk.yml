@@ -3,8 +3,21 @@ on:
   push:
     tags: ["sdk-v*"]
 jobs:
+  secrets-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          VC_API_KEY_STAGING: ${{ secrets.VC_API_KEY_STAGING }}
+        run: |
+          [ -n "$NPM_TOKEN" ] || (echo "Missing NPM_TOKEN" && exit 1)
+          [ -n "$PYPI_TOKEN" ] || (echo "Missing PYPI_TOKEN" && exit 1)
+          [ -n "$VC_API_KEY_STAGING" ] || (echo "Missing VC_API_KEY_STAGING" && exit 1)
   sdk-guard:
     runs-on: ubuntu-latest
+    needs: [secrets-check]
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -32,7 +45,7 @@ jobs:
 
   ts:
     runs-on: ubuntu-latest
-    needs: [sdk-guard]
+    needs: [secrets-check, sdk-guard]
     steps:
       - uses: actions/checkout@v4
       - name: Ensure OpenAPI spec (prefer repo)
@@ -74,7 +87,7 @@ jobs:
 
   py:
     runs-on: ubuntu-latest
-    needs: [sdk-guard]
+    needs: [secrets-check, sdk-guard]
     steps:
       - uses: actions/checkout@v4
       - name: Install generator (pinned)

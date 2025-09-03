@@ -1,0 +1,25 @@
+name: update-openapi-badge
+on:
+  push:
+    branches: [main]
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Read version from openapi.json
+        run: echo "VER=$(jq -r '.info.version' openapi.json)" >> $GITHUB_ENV
+      - name: Update badge in README
+        run: |
+          sed -i -E "s#(OpenAPI-)[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9\.-]+)?#\1${VER}#g" README.md
+      - name: Commit if changed
+        run: |
+          if ! git diff --quiet -- README.md; then
+            git config user.name "github-actions"; git config user.email "actions@github.com"
+            git add README.md
+            git commit -m "docs: update OpenAPI badge to ${VER}"
+            git push
+          else
+            echo "No badge change."
+          fi

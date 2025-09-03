@@ -4,6 +4,9 @@
 [![PyPI](https://img.shields.io/pypi/v/vedacore-api.svg)](https://pypi.org/project/vedacore-api/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-1.0.0-blue.svg)](./openapi.json)
 
+[![npm next](https://img.shields.io/npm/v/%40vedacore%2Fapi/next.svg?label=npm%40next)](https://www.npmjs.com/package/@vedacore/api?activeTab=versions)
+[![PyPI pre](https://img.shields.io/pypi/v/vedacore-api.svg?label=pypi%20pre&include_prereleases)](https://pypi.org/project/vedacore-api/#history)
+
 Production-ready FastAPI service for high-precision KP astrology calculations.
 
 - Entrypoint: `apps.api.main:app`
@@ -158,6 +161,23 @@ curl -fsS http://127.0.0.1:8000/metrics | head -n 10
 # Portable health checker (prefers /health/up, fallback /health/ready)
 make check-health BASE=http://127.0.0.1:8000
 ```
+
+## Release channels
+
+| Channel | Purpose | Install |
+|---|---|---|
+| **Stable** | Frozen to committed `openapi.json` (diff‑gated) | `npm i @vedacore/api` • `pip install vedacore-api` |
+| **Next** | Nightly preview from live spec | `npm i @vedacore/api@next` • `pip install vedacore-api --pre` |
+
+**Versioning & gates**
+- SDK version equals `.info.version` in `openapi.json`.
+- Patch/minor releases are blocked by an OpenAPI breaking‑change guard.
+- Major versions allow breaking changes.
+
+**Base URL & auth**
+- Default server (prod): `https://api.vedacore.io` (override with `OPENAPI_PUBLIC_URL`).
+- Send `X-API-Key` on every request.
+- For SSE, first call `/api/v1/auth/stream-token`, then connect with `?token=<jwt>`.
 
 ## Testing
 

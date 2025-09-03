@@ -28,3 +28,10 @@ CI Workflow
 Notes
 - SSE endpoints use EventSource/websocket directly; SDKs don’t wrap streams.
 - Auth: send X-API-Key header; streaming uses token flow via /api/v1/auth/stream-token.
+
+Channels & policy
+
+- Stable: Built from repo‑committed `openapi.json`. Published on `sdk-vX.Y.Z` tags. Semver enforced; breaking changes require a major.
+- Next: Nightly from the live spec. Published as `@vedacore/api@next` (npm) and `vedacore-api==X.Y.Z.devYYYYMMDDHHMM` (PyPI). Expect churn.
+
+Choose stable for production. Use next to test upcoming changes early.
