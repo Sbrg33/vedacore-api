@@ -172,16 +172,14 @@ jobs:
             done; \
             if [ $ok -eq 1 ]; then echo "✅ Ready"; else echo "❌ Not ready"; docker logs vedacore-api || true; exit 1; fi
             # Verify running build SHA matches intended (best effort)
-            RUN_SHA=$(curl -fsS http://127.0.0.1:${PORT}/api/v1/health/version 2>/dev/null | python3 - << 'PY'
+            RUN_SHA=$(curl -fsS http://127.0.0.1:${PORT}/api/v1/health/version 2>/dev/null | python3 -c "
 import sys, json
 try:
     d=json.load(sys.stdin)
-    # allow both build_sha and build.sha key styles
     print(d.get('build_sha') or d.get('build',{}).get('sha') or '')
 except Exception:
     print('')
-PY
-)
+")
             if [ -n "$INTENDED_SHA" ] && [ -n "$RUN_SHA" ]; then
               case "$INTENDED_SHA" in
                 sha-*) EXPECTED=${INTENDED_SHA#sha-} ;;
