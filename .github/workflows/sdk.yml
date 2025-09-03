@@ -3,8 +3,36 @@ on:
   push:
     tags: ["sdk-v*"]
 jobs:
+  sdk-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Ensure spec is committed
+        run: test -f openapi.json || (echo "openapi.json missing" && exit 1)
+      - name: Find previous SDK tag
+        id: prev
+        run: |
+          git fetch --tags
+          CUR=${GITHUB_REF_NAME}
+          PREV=$(git tag --list 'sdk-v*' | grep -v "^${CUR}$" | sort -V | tail -n1)
+          echo "prev_tag=$PREV" >> $GITHUB_OUTPUT
+      - name: Skip if no previous tag
+        if: steps.prev.outputs.prev_tag == ''
+        run: echo "No previous tag — skipping diff gate (first release)."
+      - name: Extract previous spec
+        if: steps.prev.outputs.prev_tag != ''
+        run: |
+          git show "${{ steps.prev.outputs.prev_tag }}:openapi.json" > openapi_prev.json
+      - name: Breaking-change check (oasdiff)
+        if: steps.prev.outputs.prev_tag != ''
+        run: |
+          docker run --rm -v "$PWD:/work" tufin/oasdiff:2.8.8 \
+            breaking /work/openapi_prev.json /work/openapi.json
+
   ts:
     runs-on: ubuntu-latest
+    needs: [sdk-guard]
     steps:
       - uses: actions/checkout@v4
       - name: Ensure OpenAPI spec (prefer repo)
@@ -46,6 +74,7 @@ jobs:
 
   py:
     runs-on: ubuntu-latest
+    needs: [sdk-guard]
     steps:
       - uses: actions/checkout@v4
       - name: Install generator (pinned)
@@ -72,6 +101,125 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+
+  smoke-ts:
+    if: startsWith(github.ref, 'refs/tags/sdk-v')
+    runs-on: ubuntu-latest
+    needs: [ts]
+    steps:
+      - name: Setup temp project
+        run: |
+          mkdir -p /tmp/vc-ts && cd /tmp/vc-ts
+          npm init -y
+          VERSION=${GITHUB_REF_NAME#sdk-v}
+          npm i @vedacore/api@"$VERSION" typescript tsx eventsource
+          node -e "console.log('installed @vedacore/api', require('@vedacore/api') ? 'OK' : 'FAIL')"
+
+  smoke-py:
+    if: startsWith(github.ref, 'refs/tags/sdk-v')
+    runs-on: ubuntu-latest
+    needs: [py]
+    steps:
+      - name: Install and import SDK
+        run: |
+          VERSION=${GITHUB_REF_NAME#sdk-v}
+          python -m pip install --upgrade pip
+          pip install "vedacore-api==$VERSION"
+          python - <<'PY'
+import vedacore_api
+print('vedacore_api OK', vedacore_api.__version__ if hasattr(vedacore_api,'__version__') else '')
+PY
+
+  smoke-ts-typed:
+    if: startsWith(github.ref, 'refs/tags/sdk-v')
+    runs-on: ubuntu-latest
+    needs: [ts]
+    env:
+      VC_API_KEY: ${{ secrets.VC_API_KEY_STAGING }}
+    steps:
+      - run: node -v && npm -v
+      - run: |
+          VERSION=${GITHUB_REF_NAME#sdk-v}
+          npm init -y
+          npm i @vedacore/api@"$VERSION" eventsource tsx typescript
+      - name: Run typed call + SSE handshake
+        run: |
+          cat > smoke.ts <<'TS'
+          import { Configuration, KpApi, AuthApi } from "@vedacore/api";
+          import EventSource from "eventsource";
+
+          const cfg = new Configuration({
+            basePath: "https://api.vedacore.io",
+            headers: { "X-API-Key": process.env.VC_API_KEY! },
+          });
+
+          async function main() {
+            const kp = new KpApi(cfg);
+            const res = await (kp as any).kpRunAnalysis?.({ kPRequest: { timestamp: "2025-09-03T15:00:00Z", lat: 40.71, lon: -74.00 } });
+            if (!res) throw new Error("KP analysis failed or method not found");
+
+            const auth = new AuthApi(cfg) as any;
+            const getToken = auth.authStreamToken ?? auth.v1AuthStreamToken;
+            if (!getToken) throw new Error("auth stream-token method not found");
+            const t = await getToken.call(auth, { streamTokenRequest: { topics: ["enhanced"], ttlSeconds: 60 } });
+
+            const url = `https://api.vedacore.io/api/v1/stream/enhanced?token=${t.token ?? t?.data?.token ?? t}`;
+            const es = new EventSource(url);
+            let done = false;
+            const timer = setTimeout(() => { if (!done) { console.log("SSE timeout"); process.exit(0); } }, 10000);
+            es.onmessage = (e) => { done = true; console.log("SSE:", String(e.data || "").slice(0, 120)); es.close(); clearTimeout(timer); process.exit(0); };
+            es.onerror = () => { /* tolerate idle stream */ };
+          }
+          main().catch((e) => { console.error(e); process.exit(1); });
+          TS
+          npx tsx smoke.ts
+
+  smoke-py-typed:
+    if: startsWith(github.ref, 'refs/tags/sdk-v')
+    runs-on: ubuntu-latest
+    needs: [py]
+    env:
+      VC_API_KEY: ${{ secrets.VC_API_KEY_STAGING }}
+    steps:
+      - run: python -V
+      - run: |
+          VERSION=${GITHUB_REF_NAME#sdk-v}
+          python -m pip install --upgrade pip
+          pip install "vedacore-api==$VERSION" httpx
+      - name: Run typed call + SSE handshake
+        run: |
+          python - <<'PY'
+import os, importlib, httpx
+from vedacore_api import Client
+
+client = Client(base_url="https://api.vedacore.io", headers={"X-API-Key": os.environ["VC_API_KEY"]})
+
+# KP analysis (try primary name)
+kp_mod = importlib.import_module('vedacore_api.api.kp')
+kp_fn = getattr(kp_mod, 'kp_run_analysis', None)
+if kp_fn is None:
+    raise SystemExit('kp_run_analysis not found')
+models = importlib.import_module('vedacore_api.models')
+Req = getattr(models, 'KpAnalysisRequest', None) or getattr(models, 'KpRequest', None)
+if Req is None:
+    raise SystemExit('KP request model not found')
+req = Req(timestamp="2025-09-03T15:00:00Z", lat=40.71, lon=-74.00)
+r = kp_fn.sync(client=client, json_body=req)
+assert r is not None
+
+# Stream token: try both names
+auth_mod = importlib.import_module('vedacore_api.api.auth')
+tok_fn = getattr(auth_mod, 'auth_stream_token', None) or getattr(auth_mod, 'v1_auth_stream_token', None)
+TokReq = getattr(models, 'StreamTokenRequest')
+tok = tok_fn.sync(client=client, json_body=TokReq(topics=["enhanced"], ttl_seconds=60))
+token = getattr(tok, 'token', None) or getattr(getattr(tok, 'data', None) or {}, 'get', lambda _: None)('token')
+with httpx.Client(timeout=10.0) as c:
+    with c.stream("GET", f"https://api.vedacore.io/api/v1/stream/enhanced?token={token}") as s:
+        for line in s.iter_lines():
+            if line and line.startswith(b"data:"):
+                print("SSE:", line[:80])
+                break
+PY
   # Optional: breaking change gate (requires previous spec)
   # diff:
   #   runs-on: ubuntu-latest

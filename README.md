@@ -1,5 +1,9 @@
 # VedaCore API (Minimal Export)
 
+[![npm](https://img.shields.io/npm/v/%40vedacore%2Fapi.svg)](https://www.npmjs.com/package/@vedacore/api)
+[![PyPI](https://img.shields.io/pypi/v/vedacore-api.svg)](https://pypi.org/project/vedacore-api/)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-1.0.0-blue.svg)](./openapi.json)
+
 Production-ready FastAPI service for high-precision KP astrology calculations.
 
 - Entrypoint: `apps.api.main:app`
