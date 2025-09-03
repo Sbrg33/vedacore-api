@@ -56,3 +56,16 @@ docker-smoke: docker-stop docker-build docker-run
 # Portable API health check (prefers /health/up, fallback /health/ready)
 check-health:
 	PYTHONPATH=./src:. python tools/check_api_health.py --base $(BASE) --json
+export-openapi:
+	@echo "Exporting OpenAPI schema to openapi.json"
+	@python tools/export_openapi.py --base $(BASE) --out openapi.json
+
+sdk-ts:
+	@echo "Generating TypeScript SDK (requires Docker)"
+	@docker run --rm -v "$(PWD)":/local openapitools/openapi-generator-cli:v7.6.0 generate \
+	  -i /local/openapi.json -g typescript-fetch -o /local/sdk/ts \
+	  -p useSingleRequestParameter=true,typescriptThreePlus=true,supportsES6=true,withSeparateModelsAndApi=true,npmName=@vedacore/api
+
+sdk-python:
+	@echo "Generating Python SDK (requires openapi-python-client)"
+	@openapi-python-client generate --path openapi.json --meta setup --output-path sdk/python

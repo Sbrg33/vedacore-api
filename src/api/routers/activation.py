@@ -1002,7 +1002,12 @@ async def _generate_activation_stream(
             streaming_metrics.record_activation_stream_duration(duration)
 
 
-@router.get("/activation/stream")
+@router.get(
+    "/activation/stream",
+    summary="Activation SSE stream",
+    operation_id="activation_stream_sse",
+    responses={200: {"content": {"text/event-stream": {}}}},
+)
 async def stream_activation(
     request: Request,
     response: Response,

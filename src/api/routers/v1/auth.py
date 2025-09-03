@@ -11,6 +11,7 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Depends, Request
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from fastapi.security import HTTPBearer
 import jwt
 
@@ -23,7 +24,7 @@ from .models import (
 )
 from app.core.environment import get_complete_config
 
-router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
+router = APIRouter(prefix="/api/v1/auth", tags=["auth"], responses=DEFAULT_ERROR_RESPONSES)
 security = HTTPBearer()
 
 
@@ -96,7 +97,12 @@ async def verify_api_token(request: Request, credentials = Depends(security)) ->
         )
 
 
-@router.post("/stream-token", response_model=BaseResponse, summary="Issue Streaming Token")
+@router.post(
+    "/stream-token",
+    response_model=BaseResponse,
+    summary="Issue Streaming Token",
+    operation_id="v1_auth_streamToken",
+)
 async def issue_stream_token(
     request: StreamTokenRequest,
     auth_info: dict = Depends(verify_api_token)
@@ -184,7 +190,12 @@ async def issue_stream_token(
         )
 
 
-@router.get("/validate", response_model=BaseResponse, summary="Validate Token")
+@router.get(
+    "/validate",
+    response_model=BaseResponse,
+    summary="Validate Token",
+    operation_id="v1_auth_validate",
+)
 async def validate_token(auth_info: dict = Depends(verify_api_token)) -> BaseResponse:
     """
     Validate current authentication token.

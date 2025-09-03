@@ -4,9 +4,9 @@ VedaCore Signals API - Main Application
 FastAPI application for KP ephemeris-based trading signals
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, JSONResponse
 
 try:
     from fastapi.responses import ORJSONResponse
@@ -48,6 +48,8 @@ from app.core.logging import get_api_logger, setup_logging
 from app.core.environment import get_complete_config
 from refactor.monitoring import set_feature_flag, setup_prometheus_metrics
 from config.feature_flags import get_feature_flags
+from api.models.responses import Problem
+from fastapi.openapi.utils import get_openapi
 
 # Initialize structured logging EARLY (before any logger usage)
 setup_logging(
@@ -739,3 +741,40 @@ async def get_systems():
         "health": health,
         "metadata": status["metadata"],
     }
+# Global HTTPException handler emitting RFC7807 Problem Details
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    problem = Problem(title=str(exc.detail) if exc.detail else "HTTP error", status=exc.status_code)
+    return JSONResponse(status_code=exc.status_code, content=problem.model_dump())
+
+# Fallback handler for uncaught exceptions
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    problem = Problem(title="Internal Server Error", status=500, detail=str(exc)[:200])
+    return JSONResponse(status_code=500, content=problem.model_dump())
+# Custom OpenAPI schema with metadata (servers/contact/license)
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=os.getenv("VC_API_VERSION", "1.0.0"),
+        description=app.description,
+        routes=app.routes,
+    )
+    # Servers
+    public_url = os.getenv("PUBLIC_URL") or os.getenv("VEDACORE_URL") or "/"
+    schema["servers"] = [{"url": public_url}]
+    # Contact and license
+    schema.setdefault("info", {}).setdefault("contact", {})
+    schema["info"]["contact"].update(
+        {"name": "VedaCore Support", "email": os.getenv("SUPPORT_EMAIL", "support@vedacore.io")}
+    )
+    schema["info"]["license"] = {"name": "Proprietary", "url": os.getenv("LICENSE_URL", "https://vedacore.io/license")}
+    # Surface build SHA
+    schema["info"].setdefault("x-build", {})
+    schema["info"]["x-build"]["sha"] = os.getenv("VC_BUILD_SHA", "unknown")
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi

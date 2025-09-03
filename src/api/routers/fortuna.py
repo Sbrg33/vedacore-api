@@ -9,6 +9,7 @@ from datetime import date as Date
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, ConfigDict, Field
 
 from refactor.facade import (
@@ -18,7 +19,7 @@ from refactor.facade import (
 )
 from refactor.fortuna_points import FortunaPoint
 
-router = APIRouter(prefix="/api/v1/fortuna", tags=["Fortuna Points"])
+router = APIRouter(prefix="/api/v1/fortuna", tags=["fortuna"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class FortunaRequest(BaseModel):
@@ -119,8 +120,23 @@ class FortunaRangeRequest(BaseModel):
     )
 
 
-@router.post("/calculate", response_model=dict[str, Any])
-async def calculate_fortuna_points(request: FortunaRequest) -> dict[str, Any]:
+from api.models.responses import (
+    FortunaCalculateResponse,
+    PartOfFortuneResponse,
+    FortunaMovementResponse,
+    FortunaRangeResponse,
+    FortunaAvailablePoint,
+    FortunaHelpResponse,
+)
+
+
+@router.post(
+    "/calculate",
+    response_model=FortunaCalculateResponse,
+    summary="Calculate Fortuna/Arabic Parts",
+    operation_id="fortuna_calculate",
+)
+async def calculate_fortuna_points(request: FortunaRequest) -> FortunaCalculateResponse:
     """
     Calculate Arabic Parts/Fortuna Points.
 
@@ -170,8 +186,13 @@ async def calculate_fortuna_points(request: FortunaRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/part-of-fortune", response_model=dict[str, Any])
-async def calculate_part_of_fortune(request: PartOfFortuneRequest) -> dict[str, Any]:
+@router.post(
+    "/part-of-fortune",
+    response_model=PartOfFortuneResponse,
+    summary="Calculate Part of Fortune",
+    operation_id="fortuna_partOfFortune",
+)
+async def calculate_part_of_fortune(request: PartOfFortuneRequest) -> PartOfFortuneResponse:
     """
     Calculate Part of Fortune with detailed analysis.
 
@@ -225,8 +246,13 @@ async def calculate_part_of_fortune(request: PartOfFortuneRequest) -> dict[str, 
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/movement", response_model=dict[str, Any])
-async def track_fortuna_movement(request: FortunaMovementRequest) -> dict[str, Any]:
+@router.post(
+    "/movement",
+    response_model=FortunaMovementResponse,
+    summary="Track Fortuna movement",
+    operation_id="fortuna_movement",
+)
+async def track_fortuna_movement(request: FortunaMovementRequest) -> FortunaMovementResponse:
     """
     Track movement of fortuna points throughout a day.
 
@@ -282,8 +308,13 @@ async def track_fortuna_movement(request: FortunaMovementRequest) -> dict[str, A
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/range", response_model=dict[str, Any])
-async def get_fortuna_range(request: FortunaRangeRequest) -> dict[str, Any]:
+@router.post(
+    "/range",
+    response_model=FortunaRangeResponse,
+    summary="Fortuna over time range",
+    operation_id="fortuna_range",
+)
+async def get_fortuna_range(request: FortunaRangeRequest) -> FortunaRangeResponse:
     """
     Get fortuna point positions over a time range.
 
@@ -345,8 +376,13 @@ async def get_fortuna_range(request: FortunaRangeRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/points", response_model=list[dict[str, Any]])
-async def list_available_points() -> list[dict[str, Any]]:
+@router.get(
+    "/points",
+    response_model=list[FortunaAvailablePoint],
+    summary="List available Fortuna Points",
+    operation_id="fortuna_pointsList",
+)
+async def list_available_points() -> list[FortunaAvailablePoint]:
     """
     List all available Fortuna Points/Arabic Parts.
 
@@ -378,8 +414,13 @@ async def list_available_points() -> list[dict[str, Any]]:
     return points_info
 
 
-@router.get("/help", response_model=dict[str, Any])
-async def get_fortuna_help() -> dict[str, Any]:
+@router.get(
+    "/help",
+    response_model=FortunaHelpResponse,
+    summary="Fortuna help",
+    operation_id="fortuna_help",
+)
+async def get_fortuna_help() -> FortunaHelpResponse:
     """
     Get help information about Fortuna Points system.
 

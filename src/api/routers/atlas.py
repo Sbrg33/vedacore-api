@@ -7,11 +7,12 @@ Lightweight endpoints to resolve cities to coordinates/timezone.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel
 
 from app.services.atlas_service import get_by_id, load_atlas, search
 
-router = APIRouter(prefix="/api/v1/atlas", tags=["atlas"])
+router = APIRouter(prefix="/api/v1/atlas", tags=["atlas"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class AtlasResult(BaseModel):
@@ -24,7 +25,12 @@ class AtlasResult(BaseModel):
     timezone: str
 
 
-@router.get("/search", response_model=list[AtlasResult])
+@router.get(
+    "/search",
+    response_model=list[AtlasResult],
+    summary="Search cities",
+    operation_id="atlas_search",
+)
 def search_cities(
     q: str = Query(..., min_length=1, description="City name query"),
     country: str | None = Query(None, description="Country filter (exact match)"),
@@ -36,7 +42,12 @@ def search_cities(
     return [AtlasResult(**e.to_public()) for e in results]
 
 
-@router.get("/{city_id}", response_model=AtlasResult)
+@router.get(
+    "/{city_id}",
+    response_model=AtlasResult,
+    summary="Get city by id",
+    operation_id="atlas_get",
+)
 def get_city(city_id: str):
     load_atlas()
     entry = get_by_id(city_id)

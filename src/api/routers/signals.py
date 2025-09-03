@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 
 from app.core.config import NY_TZ
 from app.core.session import in_session
@@ -21,7 +22,7 @@ from app.services.facade_adapter import FacadeAdapter
 from refactor.monitoring import Timer
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/signals", tags=["signals"])
+router = APIRouter(prefix="/signals", tags=["signals"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 # Dependency injection
@@ -40,7 +41,12 @@ async def get_amd() -> AMDPhaseDetector:
     return AMDPhaseDetector()
 
 
-@router.post("/intraday", response_model=list[IntradaySlice])
+@router.post(
+    "/intraday",
+    response_model=list[IntradaySlice],
+    summary="Legacy intraday signals",
+    operation_id="signals_intraday",
+)
 async def get_intraday_signals(
     request: IntradayRequest,
     cache: CacheService = Depends(get_cache),
@@ -165,7 +171,12 @@ async def get_intraday_signals(
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/health", response_model=SignalsHealthResponse)
+@router.get(
+    "/health",
+    response_model=SignalsHealthResponse,
+    summary="Signals health",
+    operation_id="signals_health",
+)
 async def signals_health() -> SignalsHealthResponse:
     """Health check for signals router"""
     return SignalsHealthResponse(status="healthy", service="signals")

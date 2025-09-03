@@ -23,6 +23,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 
 from ..services.auth import AuthError, validate_jwt_token
 from ..services.rate_limiter import log_rate_limit_violation, rate_limiter
@@ -38,7 +39,7 @@ except ImportError:
     METRICS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/ws", tags=["websocket"])
+router = APIRouter(prefix="/ws", tags=["ws"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 @router.websocket("")
@@ -210,7 +211,12 @@ async def websocket_endpoint(
             logger.error(f"Error during WebSocket cleanup: {e}")
 
 
-@router.get("/health", response_model=WebSocketHealthResponse)
+@router.get(
+    "/health",
+    response_model=WebSocketHealthResponse,
+    summary="WebSocket health",
+    operation_id="ws_health",
+)
 async def websocket_health() -> WebSocketHealthResponse:
     """
     WebSocket service health check.
@@ -250,7 +256,12 @@ async def websocket_health() -> WebSocketHealthResponse:
         )
 
 
-@router.get("/stats", response_model=WebSocketStatsResponse)
+@router.get(
+    "/stats",
+    response_model=WebSocketStatsResponse,
+    summary="WebSocket stats",
+    operation_id="ws_stats",
+)
 async def websocket_stats() -> WebSocketStatsResponse:
     """
     Detailed WebSocket statistics for monitoring.

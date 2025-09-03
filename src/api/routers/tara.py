@@ -8,12 +8,13 @@ from datetime import UTC, date, datetime, time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, ConfigDict, Field
 
 from refactor.facade import get_muhurta_tara, get_positions, get_tara_bala
 from refactor.tara_bala import TaraType
 
-router = APIRouter(prefix="/api/v1/tara", tags=["Tara Bala"])
+router = APIRouter(prefix="/api/v1/tara", tags=["tara"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class TaraAnalysisRequest(BaseModel):
@@ -87,8 +88,23 @@ class UniversalTaraRequest(BaseModel):
     )
 
 
-@router.post("/personal", response_model=dict[str, Any])
-async def get_personal_tara(request: TaraAnalysisRequest) -> dict[str, Any]:
+from api.models.responses import (
+    TaraPersonalResponse,
+    MuhurtaTaraResponse,
+    TaraDayScanResponse,
+    UniversalTaraResponse,
+    TaraTypeInfo,
+    TaraHelpResponse,
+)
+
+
+@router.post(
+    "/personal",
+    response_model=TaraPersonalResponse,
+    summary="Personal Tara analysis",
+    operation_id="tara_personal",
+)
+async def get_personal_tara(request: TaraAnalysisRequest) -> TaraPersonalResponse:
     """
     Calculate personal Tara Bala based on birth Moon.
 
@@ -111,8 +127,13 @@ async def get_personal_tara(request: TaraAnalysisRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/muhurta", response_model=dict[str, Any])
-async def get_muhurta_analysis(request: MuhurtaTaraRequest) -> dict[str, Any]:
+@router.post(
+    "/muhurta",
+    response_model=MuhurtaTaraResponse,
+    summary="Muhurta Tara analysis",
+    operation_id="tara_muhurta",
+)
+async def get_muhurta_analysis(request: MuhurtaTaraRequest) -> MuhurtaTaraResponse:
     """
     Evaluate muhurta quality for multiple participants.
 
@@ -136,8 +157,13 @@ async def get_muhurta_analysis(request: MuhurtaTaraRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/day-scan", response_model=dict[str, Any])
-async def scan_tara_for_day(request: TaraDayRequest) -> dict[str, Any]:
+@router.post(
+    "/day-scan",
+    response_model=TaraDayScanResponse,
+    summary="Tara day scan",
+    operation_id="tara_dayScan",
+)
+async def scan_tara_for_day(request: TaraDayRequest) -> TaraDayScanResponse:
     """
     Scan Tara quality throughout a day.
 
@@ -216,8 +242,13 @@ async def scan_tara_for_day(request: TaraDayRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/universal", response_model=dict[str, Any])
-async def get_universal_tara(request: UniversalTaraRequest) -> dict[str, Any]:
+@router.post(
+    "/universal",
+    response_model=UniversalTaraResponse,
+    summary="Universal Tara",
+    operation_id="tara_universal",
+)
+async def get_universal_tara(request: UniversalTaraRequest) -> UniversalTaraResponse:
     """
     Calculate universal Tara based on current Moon nakshatra.
 
@@ -261,8 +292,13 @@ async def get_universal_tara(request: UniversalTaraRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/types", response_model=list[dict[str, Any]])
-async def get_tara_types() -> list[dict[str, Any]]:
+@router.get(
+    "/types",
+    response_model=list[TaraTypeInfo],
+    summary="List Tara types",
+    operation_id="tara_types",
+)
+async def get_tara_types() -> list[TaraTypeInfo]:
     """
     Get information about all 9 Tara types.
 
@@ -283,8 +319,13 @@ async def get_tara_types() -> list[dict[str, Any]]:
     ]
 
 
-@router.get("/help", response_model=dict[str, Any])
-async def get_tara_help() -> dict[str, Any]:
+@router.get(
+    "/help",
+    response_model=TaraHelpResponse,
+    summary="Tara help",
+    operation_id="tara_help",
+)
+async def get_tara_help() -> TaraHelpResponse:
     """
     Get help information about Tara Bala system.
 

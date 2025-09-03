@@ -8,6 +8,7 @@ All endpoints use KP ayanamsha and traditional KP methods.
 from typing import Dict, List, Optional, Any, Literal
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field
 
 from .models import (
@@ -17,7 +18,7 @@ from .models import (
     PATH_TEMPLATES
 )
 
-router = APIRouter(prefix="/api/v1/kp", tags=["KP"])
+router = APIRouter(prefix="/api/v1/kp", tags=["kp"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 # Request/Response Models
@@ -90,7 +91,12 @@ class ChainResponse(BaseModel):
 
 
 # Endpoints
-@router.post("/chart", response_model=BaseResponse, summary="Generate KP Chart")
+@router.post(
+    "/chart",
+    response_model=BaseResponse,
+    summary="Generate KP Chart",
+    operation_id="v1_kp_chart",
+)
 async def calculate_kp_chart(request: ChartRequest) -> BaseResponse:
     """
     Calculate complete KP chart with cusps, sub-lords, and significators.
@@ -141,7 +147,12 @@ async def calculate_kp_chart(request: ChartRequest) -> BaseResponse:
         )
 
 
-@router.post("/chain", response_model=BaseResponse, summary="Calculate KP Chain")
+@router.post(
+    "/chain",
+    response_model=BaseResponse,
+    summary="Calculate KP Chain",
+    operation_id="v1_kp_chain",
+)
 async def calculate_kp_chain(request: ChainRequest) -> BaseResponse:
     """
     Calculate KP chain (Nakshatra Lord → Sub Lord → Sub-Sub Lord) for target.
@@ -198,7 +209,12 @@ async def calculate_kp_chain(request: ChainRequest) -> BaseResponse:
         )
 
 
-@router.post("/ruling-planets", response_model=BaseResponse, summary="Calculate KP Ruling Planets")
+@router.post(
+    "/ruling-planets",
+    response_model=BaseResponse,
+    summary="Calculate KP Ruling Planets",
+    operation_id="v1_kp_rulingPlanets",
+)
 async def calculate_ruling_planets(request: RulingPlanetsRequest) -> BaseResponse:
     """
     Calculate KP Ruling Planets for given time and place.
@@ -239,7 +255,12 @@ async def calculate_ruling_planets(request: RulingPlanetsRequest) -> BaseRespons
         )
 
 
-@router.post("/horary", response_model=BaseResponse, summary="Calculate KP Horary")
+@router.post(
+    "/horary",
+    response_model=BaseResponse,
+    summary="Calculate KP Horary",
+    operation_id="v1_kp_horary",
+)
 async def calculate_kp_horary(request: HoraryRequest) -> BaseResponse:
     """
     Calculate KP Horary chart using number (1-249) or datetime mode.
@@ -273,7 +294,12 @@ async def calculate_kp_horary(request: HoraryRequest) -> BaseResponse:
         )
 
 
-@router.post("/transit-events", response_model=BaseResponse, summary="Calculate KP Transit Events")
+@router.post(
+    "/transit-events",
+    response_model=BaseResponse,
+    summary="Calculate KP Transit Events",
+    operation_id="v1_kp_transitEvents",
+)
 async def calculate_transit_events(request: TransitEventsRequest) -> BaseResponse:
     """
     Calculate KP transit events within specified window.

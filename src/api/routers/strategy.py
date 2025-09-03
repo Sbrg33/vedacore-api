@@ -134,7 +134,12 @@ class ConfigDryrunRequest(BaseModel):
     system: str = Field(default="KP_STRATEGY", description="System identifier")
 
 
-@router.post("/day", summary="Get daily confidence timeline", response_model=StrategyDayResponse)
+@router.post(
+    "/day",
+    summary="Get daily confidence timeline",
+    response_model=StrategyDayResponse,
+    operation_id="strategy_day",
+)
 async def strategy_day(req: DayRequest = Body(...)) -> StrategyDayResponse:
     """
     Generate minute-by-minute confidence timeline for a trading day.
@@ -205,7 +210,12 @@ async def strategy_day(req: DayRequest = Body(...)) -> StrategyDayResponse:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/window", summary="Get window confidence aggregation", response_model=StrategyWindowResponse)
+@router.post(
+    "/window",
+    summary="Get window confidence aggregation",
+    response_model=StrategyWindowResponse,
+    operation_id="strategy_window",
+)
 async def strategy_window(req: WindowRequest = Body(...)) -> StrategyWindowResponse:
     """
     Get aggregated confidence statistics for a time window.
@@ -252,7 +262,12 @@ async def strategy_window(req: WindowRequest = Body(...)) -> StrategyWindowRespo
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/config", summary="Get strategy configuration", response_model=StrategyConfigResponse)
+@router.get(
+    "/config",
+    summary="Get strategy configuration",
+    response_model=StrategyConfigResponse,
+    operation_id="strategy_config",
+)
 async def strategy_config(system: str = Query(default="KP_STRATEGY")) -> StrategyConfigResponse:
     """
     Get current strategy configuration including weights, rules, and thresholds.
@@ -285,7 +300,12 @@ async def strategy_config(system: str = Query(default="KP_STRATEGY")) -> Strateg
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/config/dryrun", summary="Test configuration without persisting", response_model=StrategyDryRunResponse)
+@router.post(
+    "/config/dryrun",
+    summary="Test configuration without persisting",
+    response_model=StrategyDryRunResponse,
+    operation_id="strategy_configDryrun",
+)
 async def strategy_config_dryrun(
     req: ConfigDryrunRequest = Body(...),
 ) -> StrategyDryRunResponse:
@@ -337,7 +357,12 @@ async def strategy_config_dryrun(
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/health", summary="Check strategy system health", response_model=StrategyHealthResponse)
+@router.get(
+    "/health",
+    summary="Check strategy system health",
+    response_model=StrategyHealthResponse,
+    operation_id="strategy_health",
+)
 async def strategy_health() -> StrategyHealthResponse:
     """
     Check health of strategy system and dependencies.

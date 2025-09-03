@@ -12,7 +12,9 @@ from pydantic import BaseModel
 
 from .models import BaseResponse, PATH_TEMPLATES
 
-router = APIRouter(prefix="/api/v1/ref", tags=["Reference"])
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
+
+router = APIRouter(prefix="/api/v1/ref", tags=["reference"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class AyanamshaInfo(BaseModel):
@@ -39,7 +41,12 @@ class AspectModeInfo(BaseModel):
     supported_systems: List[str]
 
 
-@router.get("/ayanamshas", response_model=BaseResponse, summary="List Available Ayanamshas")
+@router.get(
+    "/ayanamshas",
+    response_model=BaseResponse,
+    summary="List Available Ayanamshas",
+    operation_id="v1_ref_ayanamshas",
+)
 async def get_ayanamshas() -> BaseResponse:
     """
     Get list of supported Ayanamsha systems.
@@ -69,7 +76,12 @@ async def get_ayanamshas() -> BaseResponse:
     )
 
 
-@router.get("/varga-types", response_model=BaseResponse, summary="List Available Varga Types")
+@router.get(
+    "/varga-types",
+    response_model=BaseResponse,
+    summary="List Available Varga Types",
+    operation_id="v1_ref_vargaTypes",
+)
 async def get_varga_types() -> BaseResponse:
     """
     Get list of supported Varga (divisional chart) types.
@@ -97,7 +109,12 @@ async def get_varga_types() -> BaseResponse:
     )
 
 
-@router.get("/aspect-modes", response_model=BaseResponse, summary="List Available Aspect Modes")
+@router.get(
+    "/aspect-modes",
+    response_model=BaseResponse,
+    summary="List Available Aspect Modes",
+    operation_id="v1_ref_aspectModes",
+)
 async def get_aspect_modes() -> BaseResponse:
     """
     Get list of supported aspect calculation modes.

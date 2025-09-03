@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field, field_validator
 
 from app.services.atlas_service import get_by_id as _atlas_get_by_id
@@ -26,7 +27,7 @@ from constants.location_features import MAX_LOCATIONS_PER_REQUEST
 # VedaCore production imports
 from modules.location_features import Location, compute_location_features
 
-router = APIRouter(tags=["location"])
+router = APIRouter(tags=["location"], responses=DEFAULT_ERROR_RESPONSES)
 
 # Structured logging for PM7 operational visibility
 logger = logging.getLogger(__name__)
@@ -188,7 +189,12 @@ class FeaturesPostRequest(BaseModel):
             raise ValueError("timestamp must be ISO 8601 (e.g., 2025-08-25T12:00:00Z)")
 
 
-@router.get("/features", response_model=dict[str, Any])
+@router.get(
+    "/features",
+    response_model=dict[str, Any],
+    summary="Get location features",
+    operation_id="location_getFeatures",
+)
 async def get_location_features(
     request: Request,
     response: Response,
@@ -390,7 +396,12 @@ async def get_location_features(
         )
 
 
-@router.post("/features", response_model=dict[str, Any])
+@router.post(
+    "/features",
+    response_model=dict[str, Any],
+    summary="Post location features",
+    operation_id="location_postFeatures",
+)
 async def post_location_features(
     request: Request, response: Response, req: FeaturesPostRequest
 ):

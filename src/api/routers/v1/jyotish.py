@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, HTTPException, Depends
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field
 
 from .models import (
@@ -20,7 +21,7 @@ from .models import (
     PATH_TEMPLATES
 )
 
-router = APIRouter(prefix="/api/v1/jyotish", tags=["Jyotish"])
+router = APIRouter(prefix="/api/v1/jyotish", tags=["jyotish"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 # Request/Response Models
@@ -57,7 +58,12 @@ class VargaRequest(BaseVedicRequest):
 
 
 # Endpoints
-@router.post("/chart", response_model=BaseResponse, summary="Generate Vedic Chart")
+@router.post(
+    "/chart",
+    response_model=BaseResponse,
+    summary="Generate Vedic Chart",
+    operation_id="v1_jyotish_chart",
+)
 async def calculate_chart(request: ChartRequest) -> BaseResponse:
     """
     Calculate basic Vedic chart with planets, houses, and essential points.
@@ -129,7 +135,12 @@ async def calculate_chart(request: ChartRequest) -> BaseResponse:
         )
 
 
-@router.post("/transits/window", response_model=BaseResponse, summary="Analyze Transit Window") 
+@router.post(
+    "/transits/window",
+    response_model=BaseResponse,
+    summary="Analyze Transit Window",
+    operation_id="v1_jyotish_transitsWindow",
+) 
 async def analyze_transit_window(request: TransitsWindowRequest) -> BaseResponse:
     """
     Analyze transits within specified time window.
@@ -169,7 +180,12 @@ async def analyze_transit_window(request: TransitsWindowRequest) -> BaseResponse
         )
 
 
-@router.post("/varga/{varga_type}", response_model=BaseResponse, summary="Calculate Varga Chart")
+@router.post(
+    "/varga/{varga_type}",
+    response_model=BaseResponse,
+    summary="Calculate Varga Chart",
+    operation_id="v1_jyotish_varga",
+)
 async def calculate_varga(varga_type: str, request: VargaRequest) -> BaseResponse:
     """
     Calculate divisional chart (Varga) for specified division.
@@ -219,7 +235,12 @@ async def calculate_varga(varga_type: str, request: VargaRequest) -> BaseRespons
         )
 
 
-@router.post("/panchanga", response_model=BaseResponse, summary="Calculate Panchanga")
+@router.post(
+    "/panchanga",
+    response_model=BaseResponse,
+    summary="Calculate Panchanga",
+    operation_id="v1_jyotish_panchanga",
+)
 async def calculate_panchanga(request: BaseVedicRequest) -> BaseResponse:
     """
     Calculate Panchanga (five limbs) for given time and place.

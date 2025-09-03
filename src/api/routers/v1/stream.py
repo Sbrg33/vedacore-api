@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, AsyncIterator
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from fastapi.responses import StreamingResponse
 import jwt
 import json
@@ -17,7 +18,7 @@ import asyncio
 from .models import BaseResponse, ErrorResponse, PATH_TEMPLATES
 from app.core.environment import get_complete_config
 
-router = APIRouter(prefix="/api/v1", tags=["Streaming"])
+router = APIRouter(prefix="/api/v1", tags=["stream"], responses=DEFAULT_ERROR_RESPONSES) 
 
 
 def verify_stream_token(token: str, expected_topic: Optional[str] = None) -> dict:
@@ -129,7 +130,12 @@ async def generate_sse_stream(topic: str, tenant_id: str) -> AsyncIterator[str]:
             await stream_manager.unsubscribe(topic, tenant_id, queue)
 
 
-@router.get("/stream", summary="Server-Sent Events Stream")
+@router.get(
+    "/stream",
+    summary="Server-Sent Events Stream",
+    operation_id="v1_stream_sse",
+    responses={200: {"content": {"text/event-stream": {}}}},
+)
 async def stream_events(
     topic: str = Query(..., description="Topic to subscribe to"),
     token: str = Query(..., description="One-time streaming token")
@@ -286,7 +292,12 @@ async def websocket_endpoint(
                     pass
 
 
-@router.get("/stream/topics", response_model=BaseResponse, summary="List Available Topics")
+@router.get(
+    "/stream/topics",
+    response_model=BaseResponse,
+    summary="List Available Topics",
+    operation_id="v1_stream_topics",
+)
 async def list_stream_topics() -> BaseResponse:
     """
     Get list of available streaming topics.

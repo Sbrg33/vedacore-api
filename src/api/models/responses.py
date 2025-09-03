@@ -9,7 +9,7 @@ PM requirement: Ensure every route declares response models for:
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # =======================
@@ -230,6 +230,21 @@ class RateLimitErrorResponse(ErrorResponse):
     """Rate limit error response."""
     retry_after: int = Field(..., description="Retry after seconds")
     limit_type: str = Field(..., description="Type of limit exceeded")
+
+
+# RFC 7807 Problem Details (global error model)
+class Problem(BaseModel):
+    """Problem Details per RFC 7807 for error responses."""
+    type: Optional[str] = Field(
+        None, description="URI reference that identifies the problem type"
+    )
+    title: str = Field(..., description="Short, human-readable summary of the problem")
+    status: int = Field(..., description="HTTP status code")
+    detail: Optional[str] = Field(None, description="Human-readable explanation")
+    instance: Optional[str] = Field(
+        None, description="URI reference that identifies the specific occurrence"
+    )
+    code: Optional[str] = Field(None, description="Application-specific error code")
 
 
 # =======================
@@ -518,6 +533,507 @@ class WebSocketHealthResponse(BaseModel):
     service: str = Field(..., description="Service name")
     version: str = Field(..., description="Service version")
     stats: Dict[str, int] = Field(..., description="Connection and message statistics")
+
+
+# =======================
+# Varga (Divisional) Responses
+# =======================
+
+class VargaCalculateDirectResponse(BaseModel):
+    """Direct varga calculation response."""
+    divisor: int = Field(..., ge=2, le=300, description="Divisional chart number")
+    scheme: str = Field(..., description="Calculation scheme")
+    positions: Dict[int, int] = Field(
+        ..., description="Planet ID to varga sign (1-12)"
+    )
+    note: str = Field(..., description="Human-readable clarification notes")
+
+
+class VargaCalculateResponse(BaseModel):
+    """Timestamp-based varga calculation response."""
+    timestamp: str = Field(..., description="UTC timestamp (ISO8601)")
+    divisor: int = Field(..., ge=2, le=300, description="Divisional chart number")
+    scheme: str = Field(..., description="Calculation scheme")
+    positions: Dict[str, int] = Field(
+        ..., description="Planet ID (string) to varga sign (1-12)"
+    )
+    note: str = Field(..., description="Human-readable clarification notes")
+
+
+class VargottamaStatusResponse(BaseModel):
+    """Vargottama detection response."""
+    timestamp: str = Field(..., description="UTC timestamp (ISO8601)")
+    vargottama_status: Dict[str, Dict[str, bool]] = Field(
+        ..., description="Planet name to {varga_name: is_vargottama}"
+    )
+    checked_vargas: List[int] = Field(..., description="Checked varga divisors")
+
+
+class ShodasavargaResponse(BaseModel):
+    """All 16 divisional charts response."""
+    timestamp: str = Field(..., description="UTC timestamp (ISO8601)")
+    planet_id: Optional[int] = Field(
+        None, description="Specific planet ID if filtered"
+    )
+    shodasavarga: Dict[str, Dict[str, int]] = Field(
+        ..., description="Map of Dn -> {planet_id: sign(1-12)}"
+    )
+    note: str = Field(..., description="Human-readable clarification notes")
+
+
+class VargaStrengthResponse(BaseModel):
+    """Vimshopaka Bala strength response."""
+    timestamp: str = Field(..., description="UTC timestamp (ISO8601)")
+    planet: str = Field(..., description="Planet name")
+    varga_set: str = Field(..., description="Weight set used")
+    strength: float = Field(..., ge=0, le=100, description="Strength score 0-100")
+    scale: str = Field(..., description="Scale description (e.g., 0-100)")
+    interpretation: str = Field(..., description="Human-readable strength band")
+
+
+class CustomVargaRegisterResponse(BaseModel):
+    """Custom varga scheme registration response."""
+    status: str = Field(..., description="Operation status")
+    name: str = Field(..., description="Registered scheme name")
+    divisor: int = Field(..., ge=2, le=300, description="Scheme divisor")
+    message: str = Field(..., description="Additional status message")
+
+
+class VargaSchemesCategories(BaseModel):
+    classical: List[str] = Field(..., description="Classical schemes")
+    custom: List[str] = Field(..., description="Custom schemes")
+    other: List[str] = Field(..., description="Other schemes")
+
+
+class VargaSchemesResponse(BaseModel):
+    """Available varga schemes response."""
+    schemes: List[str] = Field(..., description="All scheme identifiers")
+    count: int = Field(..., description="Total schemes")
+    categories: VargaSchemesCategories = Field(..., description="Categorized lists")
+
+
+class VargaConfigResponse(BaseModel):
+    """Varga system configuration response."""
+    features: Dict[str, Any] = Field(..., description="Feature flags and values")
+    limits: Dict[str, int] = Field(..., description="System limits")
+    classical_schemes: Dict[str, Any] = Field(
+        ..., description="Classical scheme definitions"
+    )
+    vimshopaka_sets: List[str] = Field(..., description="Available weight sets")
+    standard_vargas: List[int] = Field(..., description="Standard varga divisors")
+    shodasavarga: List[int] = Field(..., description="Shodasavarga divisors")
+
+
+# =======================
+# KP Horary Responses
+# =======================
+
+class HorarySignificatorsResponse(BaseModel):
+    """KP horary significators response.
+
+    Simplified structure exposing horary mapping and interpretation fields.
+    """
+    horary_number: int = Field(..., ge=1, le=249, description="Horary number (1-249)")
+    sign: int = Field(..., ge=1, le=12, description="Zodiac sign (1-12)")
+    sign_lord: str = Field(..., description="Sign lord planet")
+    star: int = Field(..., ge=1, le=9, description="Nakshatra ordinal (1-9)")
+    star_lord: str = Field(..., description="Nakshatra lord")
+    sub: int = Field(..., ge=1, le=3, description="Sub division (1-3)")
+    interpretation: str = Field(..., description="Guidance for use in KP")
+
+
+# =======================
+# KP Analysis & Config Responses
+# =======================
+
+class KPAnalysisResponse(BaseModel):
+    """Top-level KP analysis response container (allows extra keys)."""
+    model_config = ConfigDict(extra="allow")
+    houses: Optional[Dict[str, Any]] = Field(None, description="House analysis components")
+    planets: Optional[Dict[str, Any]] = Field(None, description="Planet analysis components")
+    matters: Optional[Dict[str, Any]] = Field(None, description="Life matters analysis")
+    timing: Optional[Dict[str, Any]] = Field(None, description="Timing analysis (dasha/transits)")
+    context: Optional[Dict[str, Any]] = Field(None, description="Calculation context")
+    summary: Optional[Dict[str, Any]] = Field(None, description="Summary and highlights")
+
+
+class KPHousePromisesResponse(BaseModel):
+    """House promise analysis response (allows extra keys)."""
+    model_config = ConfigDict(extra="allow")
+    house: Optional[int] = Field(None, description="Analyzed house number")
+    promises: Optional[Dict[str, Any]] = Field(None, description="Promise breakdown and rationale")
+
+
+class KPPlanetSignificationsResponse(BaseModel):
+    """Planet significations response (allows extra keys)."""
+    model_config = ConfigDict(extra="allow")
+    planet_id: Optional[int] = Field(None, description="Planet ID")
+    signifies: Optional[List[str]] = Field(None, description="Houses/significations list")
+
+
+class KPCuspalSublordsResponse(BaseModel):
+    """Cuspal sub-lords analysis response (allows extra keys)."""
+    model_config = ConfigDict(extra="allow")
+    cuspal_sublords: Optional[Dict[int, Dict[str, Any]]] = Field(
+        None, description="Per-house sign/star/sub details"
+    )
+
+
+class KPSignificatorsResponse(BaseModel):
+    """KP significator hierarchy response (allows extra keys)."""
+    model_config = ConfigDict(extra="allow")
+    house: Optional[int] = Field(None, description="House focused view")
+    planet: Optional[int] = Field(None, description="Planet focused view")
+    significators: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Significator hierarchy entries"
+    )
+    primary: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Primary significators (strongest)"
+    )
+    signifies: Optional[List[str]] = Field(
+        None, description="For planet-focused: houses signified by planet"
+    )
+
+
+class KPConfigRetrograde(BaseModel):
+    reverses_sublord: bool
+    strength_factor: float
+    rahu_ketu_always_retrograde: bool
+
+
+class KPConfigResponse(BaseModel):
+    """KP configuration response with typed top-level sections."""
+    retrograde: KPConfigRetrograde
+    orbs: Dict[str, Dict[str, float]]
+    significators: Dict[str, Any]
+    defaults: Dict[str, Any]
+    performance: Dict[str, Any]
+
+
+# =======================
+# Fortuna (Arabic Parts) Responses
+# =======================
+
+class FortunaPointPosition(BaseModel):
+    longitude: float = Field(..., description="Longitude in degrees")
+    sign: int = Field(..., ge=1, le=12, description="Zodiac sign (1-12)")
+    house: int = Field(..., ge=1, le=12, description="House position (1-12)")
+    nakshatra: int = Field(..., ge=1, le=27, description="Nakshatra (1-27)")
+    sub_lord: str = Field(..., description="KP sub-lord planet name")
+
+
+class FortunaPointMovement(BaseModel):
+    daily_motion: float = Field(..., description="Degrees per day")
+    retrograde: bool = Field(..., description="Retrograde flag")
+
+
+class FortunaPointInfo(BaseModel):
+    name: str = Field(..., description="Display name")
+    formula: str = Field(..., description="Formula used")
+    signification: str = Field(..., description="Point signification")
+    position: FortunaPointPosition
+    movement: FortunaPointMovement
+    strength: float = Field(..., ge=0, le=100, description="Strength score")
+    afflicted: bool = Field(..., description="Affliction flag")
+
+
+class FortunaAspect(BaseModel):
+    planet: str
+    aspect: str
+    angle: float
+    orb: float
+    applying: bool
+
+
+class FortunaTransitEvent(BaseModel):
+    house: int = Field(..., ge=1, le=12)
+    cusp_degree: float
+    hours_until: int
+    type: str
+
+
+class PartOfFortuneData(BaseModel):
+    longitude: float
+    sign: int
+    house: int
+    nakshatra: int
+    is_day_birth: bool
+    aspects: Optional[List[FortunaAspect]] = None
+    next_transits: Optional[List[FortunaTransitEvent]] = None
+
+
+class FortunaCalculateResponse(BaseModel):
+    timestamp: str
+    location: Dict[str, float]
+    fortuna_points: Dict[str, FortunaPointInfo]
+    count: int
+
+
+class PartOfFortuneResponse(BaseModel):
+    timestamp: str
+    location: Dict[str, float]
+    part_of_fortune: PartOfFortuneData
+
+
+class FortunaMovementStats(BaseModel):
+    total_movement: float
+    average_speed: float
+    min_longitude: float
+    max_longitude: float
+
+
+class FortunaMovementResponse(BaseModel):
+    date: str
+    location: Dict[str, float]
+    interval_hours: int
+    movement: Dict[str, Any]
+    statistics: Dict[str, FortunaMovementStats]
+
+
+class FortunaRangeSample(BaseModel):
+    timestamp: str
+    longitude: float
+
+
+class FortunaRangeSignChange(BaseModel):
+    timestamp: str
+    from_sign: int
+    to_sign: int
+
+
+class FortunaRangeResponse(BaseModel):
+    start: str
+    end: str
+    point: str
+    samples: List[Dict[str, Any]]
+    sign_changes: List[FortunaRangeSignChange]
+    total_samples: int
+
+
+class FortunaAvailablePoint(BaseModel):
+    name: str
+    display_name: str
+    formula: str
+    description: str
+    category: str
+
+
+class FortunaHelpResponse(BaseModel):
+    description: str
+    key_concepts: Dict[str, str]
+    primary_points: Dict[str, str]
+    usage: Dict[str, str]
+    timing_tips: List[str]
+
+
+# =======================
+# Tara Bala Responses
+# =======================
+
+class TaraPersonalResponse(BaseModel):
+    timestamp: str
+    birth_moon_longitude: float
+    tara_analysis: Dict[str, Any]
+
+
+class MuhurtaTaraResponse(BaseModel):
+    event_timestamp: str
+    participants: int
+    muhurta_analysis: Dict[str, Any]
+
+
+class TaraDaySummary(BaseModel):
+    favorable_hours: int | None
+    unfavorable_hours: int | None
+    best_time: Dict[str, Any]
+    worst_time: Dict[str, Any]
+
+
+class TaraDayScanResponse(BaseModel):
+    date: str
+    birth_moon_longitude: float
+    summary: TaraDaySummary
+    hourly_data: List[Dict[str, Any]] | None
+    key_points: List[Dict[str, Any]] | None
+
+
+class UniversalTaraInfo(BaseModel):
+    tara_number: int
+    tara_name: str
+    description: str
+    general_quality: str
+
+
+class UniversalTaraResponse(BaseModel):
+    timestamp: str
+    current_nakshatra: int
+    reference_nakshatra: int
+    universal_tara: UniversalTaraInfo
+
+
+class TaraTypeInfo(BaseModel):
+    number: int
+    name: str
+    description: str
+    quality: str
+
+
+class TaraHelpResponse(BaseModel):
+    description: str
+    usage: Dict[str, str]
+    tara_cycle: List[Dict[str, Any]]
+    best_taras: List[int]
+    worst_taras: List[int]
+    neutral_taras: List[int]
+
+
+# =======================
+# Dasha Responses
+# =======================
+
+class DashaPeriod(BaseModel):
+    planet: str | int
+    start: str
+    end: str
+    duration_days: float
+
+
+class DashaSnapshotResponse(BaseModel):
+    system: str
+    timestamp: str
+    birth_time: str
+    moon_longitude: float
+    levels: int
+    mahadasha: DashaPeriod | None = None
+    antardasha: DashaPeriod | None = None
+    pratyantardasha: DashaPeriod | None = None
+    sookshma: DashaPeriod | None = None
+    prana: DashaPeriod | None = None
+    meta: Dict[str, Any]
+
+
+class DashaChangeEvent(BaseModel):
+    level: str | int | None = None
+    type: str | None = None
+    planet: str | int | None = None
+    timestamp: str | None = None
+    meta: Dict[str, Any] | None = None
+    system: str | None = None
+    date: str | None = None
+    chart_id: str | None = None
+
+
+class DashaCycleResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    system: str
+    birth_time: str
+    moon_longitude: float
+    meta: Dict[str, Any]
+
+
+class DashaBirthBalanceResponse(BaseModel):
+    system: str
+    birth_time: str
+    moon_longitude: float
+    nakshatra: int | str
+    birth_lord: str
+    elapsed_days: float
+    remaining_days: float
+    elapsed_portion: float
+    remaining_portion: float
+    compute_time_ms: float | None = None
+
+
+# =======================
+# Nodes Responses
+# =======================
+
+class NodeEvent(BaseModel):
+    type: str = Field(..., description="Event type")
+    timestamp: str = Field(..., description="Event timestamp (ISO)")
+    speed: Optional[float] = Field(None, description="Node speed at event time")
+    metadata: Dict[str, Any] | None = Field(None, description="Additional event metadata")
+    meta: Dict[str, Any] | None = Field(None, description="Computation metadata")
+
+
+class NodeNextEventResponse(BaseModel):
+    found: bool
+    event: Optional[NodeEvent] = None
+    days_until: Optional[int] = None
+    search_start: Optional[str] = None
+    search_days: Optional[int] = None
+    compute_time_ms: Optional[float] = None
+
+
+class NodeSpeedStats(BaseModel):
+    min: float
+    max: float
+    avg: float
+
+
+class NodeStatisticsResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    event_counts: Dict[str, int] | None = None
+    speed_stats: NodeSpeedStats | None = None
+    configuration: Dict[str, Any] | None = None
+    compute_time_ms: Optional[float] = None
+
+
+class NodeConfigResponse(BaseModel):
+    system: str
+    configuration: Dict[str, Any]
+    features: Dict[str, Any]
+    thresholds: Dict[str, Any]
+    performance: Dict[str, Any]
+    cache: Dict[str, Any]
+
+
+class NodeSystemsEndpoint(BaseModel):
+    path: str
+    method: str
+    description: str
+
+
+class NodeSystemsResponse(BaseModel):
+    systems: List[Dict[str, Any]]
+    endpoints: List[NodeSystemsEndpoint]
+
+
+# =======================
+# Enhanced Signals Responses (additional)
+# =======================
+
+class EnhancedInvalidateResponse(BaseModel):
+    status: str
+    tenant_id: str
+    timestamp: str
+    invalidated: Optional[str] = None
+    message: Optional[str] = None
+    date: Optional[str] = None
+
+
+class EnhancedSignalsHealthResponse(BaseModel):
+    status: str
+    service: str
+    version: str | None = None
+    redis_available: bool | None = None
+    metrics: Dict[str, Any] | None = None
+    error: Optional[str] = None
+    timestamp: str
+
+
+# =======================
+# Eclipse Config Response
+# =======================
+
+class EclipseConfigMetadataResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    system: str | None = None
+    version: str | None = None
+    description: str | None = None
+    config: Dict[str, Any] | None = None
+    capabilities: Dict[str, Any] | None = None
+    performance: Dict[str, Any] | None = None
     error: Optional[str] = Field(None, description="Error message if unhealthy")
 
 

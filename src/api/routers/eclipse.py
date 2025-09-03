@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field, field_validator
 
 from interfaces.kp_eclipse_adapter import KPEclipseAdapter
@@ -20,7 +21,8 @@ from refactor.monitoring import (
     track_request,
 )
 
-router = APIRouter(prefix="/api/v1/eclipse", tags=["eclipse"])
+router = APIRouter(prefix="/api/v1/eclipse", tags=["eclipse"], responses=DEFAULT_ERROR_RESPONSES)
+from api.models.responses import EclipseConfigMetadataResponse
 logger = logging.getLogger(__name__)
 
 # Initialize adapter
@@ -184,7 +186,12 @@ class NextEclipseResponse(BaseModel):
 # Endpoints
 
 
-@router.post("/events", response_model=EclipseSearchResponse)
+@router.post(
+    "/events",
+    response_model=EclipseSearchResponse,
+    summary="Find eclipses",
+    operation_id="eclipse_events",
+)
 async def search_eclipses(request: EclipseSearchRequest):
     """
     Find eclipses within a date range
@@ -242,7 +249,12 @@ async def search_eclipses(request: EclipseSearchRequest):
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/visibility", response_model=VisibilityResponse)
+@router.post(
+    "/visibility",
+    response_model=VisibilityResponse,
+    summary="Check eclipse visibility",
+    operation_id="eclipse_visibility",
+)
 async def check_visibility(request: VisibilityRequest):
     """
     Check local visibility of an eclipse
@@ -308,7 +320,12 @@ async def check_visibility(request: VisibilityRequest):
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/path", response_model=PathResponse)
+@router.post(
+    "/path",
+    response_model=PathResponse,
+    summary="Get solar eclipse path",
+    operation_id="eclipse_path",
+)
 async def get_eclipse_path(request: PathRequest):
     """
     Get the path of a solar eclipse
@@ -365,7 +382,12 @@ async def get_eclipse_path(request: PathRequest):
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/next", response_model=NextEclipseResponse)
+@router.post(
+    "/next",
+    response_model=NextEclipseResponse,
+    summary="Find next eclipse",
+    operation_id="eclipse_next",
+)
 async def find_next_eclipse(request: NextEclipseRequest):
     """
     Find the next eclipse after a given time
@@ -423,8 +445,13 @@ async def find_next_eclipse(request: NextEclipseRequest):
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/config")
-async def get_eclipse_config():
+@router.get(
+    "/config",
+    response_model=EclipseConfigMetadataResponse,
+    summary="Eclipse configuration",
+    operation_id="eclipse_config",
+)
+async def get_eclipse_config() -> EclipseConfigMetadataResponse:
     """
     Get current eclipse configuration
     """

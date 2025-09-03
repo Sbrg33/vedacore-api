@@ -1,0 +1,85 @@
+name: build-and-publish-sdks
+on:
+  push:
+    tags: ["sdk-v*"]
+jobs:
+  ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure OpenAPI spec (prefer repo)
+        run: |
+          if [ ! -f openapi.json ]; then
+            echo "openapi.json not found in repo; attempting local export or remote fetch"
+            echo "::warning::openapi.json missing; set SPEC_BASE to export from a running API"
+            exit 1
+          fi
+      - name: Extract OpenAPI version
+        id: ver
+        run: |
+          OPENAPI_VERSION=$(jq -r '.info.version' openapi.json)
+          echo "OPENAPI_VERSION=$OPENAPI_VERSION" >> $GITHUB_ENV
+      - name: Assert tag version matches OpenAPI info.version
+        run: |
+          TAG_VERSION=${GITHUB_REF_NAME#sdk-v}
+          if [ "$TAG_VERSION" != "$OPENAPI_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) != OpenAPI info.version ($OPENAPI_VERSION)"
+            exit 1
+          fi
+      - name: Generate TS SDK
+        run: |
+          docker run --rm -v "$PWD":/local openapitools/openapi-generator-cli:v7.6.0 generate \
+            -i /local/openapi.json \
+            -g typescript-fetch \
+            -o /local/sdk/ts \
+            -p useSingleRequestParameter=true,typescriptThreePlus=true,supportsES6=true,withSeparateModelsAndApi=true,useUnionTypes=true,npmName=@vedacore/api,npmVersion=${OPENAPI_VERSION}
+      - name: Ensure TS package version matches
+        run: |
+          jq ".version=\"$OPENAPI_VERSION\"" sdk/ts/package.json > sdk/ts/package.json.tmp && mv sdk/ts/package.json.tmp sdk/ts/package.json
+      - name: Publish to npm
+        run: |
+          cd sdk/ts
+          npm ci
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  py:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install generator (pinned)
+        run: pipx install openapi-python-client==0.21.6
+      - name: Ensure OpenAPI spec (prefer repo)
+        run: |
+          if [ ! -f openapi.json ]; then
+            echo "::error::openapi.json missing; commit it to the repo for deterministic builds"
+            exit 1
+          fi
+      - name: Extract OpenAPI version
+        run: |
+            echo "OPENAPI_VERSION=$(jq -r '.info.version' openapi.json)" >> $GITHUB_ENV
+      - name: Generate Python SDK
+        run: openapi-python-client generate --path openapi.json --meta setup --output-path sdk/python
+      - name: Pin Python SDK version to OpenAPI info.version
+        run: |
+          sed -i -E "s/^version = .*/version = \"$OPENAPI_VERSION\"/" sdk/python/pyproject.toml || true
+      - name: Build and publish
+        run: |
+          cd sdk/python
+          python -m build
+          twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+  # Optional: breaking change gate (requires previous spec)
+  # diff:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Download previous release spec (implement per your storage)
+  #       run: echo "Provide previous openapi.json here" && exit 0
+  #     - name: Compare OpenAPI specs
+  #       run: |
+  #         docker run --rm -v "$PWD":/work tufin/oasdiff:latest \
+  #           breaking /work/prev-openapi.json /work/openapi.json || echo "No breaking changes"

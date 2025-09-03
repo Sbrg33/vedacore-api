@@ -8,6 +8,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, Field, field_validator
 
@@ -42,7 +43,7 @@ houses_errors_total = Counter(
     ["error_type"],
 )
 
-router = APIRouter(tags=["houses"])
+router = APIRouter(tags=["houses"], responses=DEFAULT_ERROR_RESPONSES)
 
 NY = ZoneInfo("America/New_York")
 UTC = ZoneInfo("UTC")
@@ -104,7 +105,12 @@ class HousesResponse(BaseModel):
     meta: dict
 
 
-@router.post("/houses", response_model=HousesResponse)
+@router.post(
+    "/houses",
+    response_model=HousesResponse,
+    summary="Calculate houses",
+    operation_id="houses_calculate",
+)
 async def compute_houses_endpoint(req: HousesRequest):
     # Import cache service
     from app.services.cache_service import CacheService

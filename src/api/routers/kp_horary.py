@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 try:
@@ -16,7 +17,7 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/kp/horary", tags=["kp-horary"])
+router = APIRouter(prefix="/api/v1/kp/horary", tags=["kp-horary"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class MoonChain(BaseModel):
@@ -112,7 +113,12 @@ def get_correlation_id() -> str:
     return str(uuid.uuid4())[:8]
 
 
-@router.post("/calculate", response_model=HoraryResponse)
+@router.post(
+    "/calculate",
+    response_model=HoraryResponse,
+    summary="Calculate KP Horary",
+    operation_id="kpHorary_calculate",
+)
 async def calculate_horary(
     request: HoraryRequest, correlation_id: str = Depends(get_correlation_id)
 ):
@@ -169,7 +175,11 @@ async def calculate_horary(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="KP Horary health",
+    operation_id="kpHorary_health",
+)
 async def health_check():
     """Health check for Horary service"""
     status = {

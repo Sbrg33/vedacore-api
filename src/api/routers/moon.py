@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field, field_validator
 
 from interfaces.kp_moon_adapter import KPMoonAdapter
@@ -20,7 +21,7 @@ from refactor.monitoring import (
     track_request,
 )
 
-router = APIRouter(prefix="/api/v1/moon", tags=["moon"])
+router = APIRouter(prefix="/api/v1/moon", tags=["moon"], responses=DEFAULT_ERROR_RESPONSES)
 logger = logging.getLogger(__name__)
 
 # Initialize adapter
@@ -130,7 +131,12 @@ class PanchangaResponse(BaseModel):
 # Endpoints
 
 
-@router.post("/profile", response_model=MoonProfileResponse)
+@router.post(
+    "/profile",
+    response_model=MoonProfileResponse,
+    summary="Get moon profile",
+    operation_id="moon_profile",
+)
 async def get_moon_profile(request: MoonProfileRequest):
     """
     Get moon profile with Phase 7 indices
@@ -193,7 +199,12 @@ async def get_moon_profile(request: MoonProfileRequest):
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/events", response_model=MoonEventsResponse)
+@router.post(
+    "/events",
+    response_model=MoonEventsResponse,
+    summary="Find moon events",
+    operation_id="moon_events",
+)
 async def find_moon_events(request: MoonEventsRequest):
     """
     Find moon anomaly events in date range
@@ -260,7 +271,12 @@ async def find_moon_events(request: MoonEventsRequest):
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/panchanga", response_model=PanchangaResponse)
+@router.get(
+    "/panchanga",
+    response_model=PanchangaResponse,
+    summary="Get Panchanga",
+    operation_id="moon_panchanga",
+)
 async def get_panchanga(
     timestamp: datetime = Query(..., description="Time for panchanga (UTC)")
 ):
@@ -321,7 +337,11 @@ async def get_panchanga(
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/strength")
+@router.get(
+    "/strength",
+    summary="Moon strength",
+    operation_id="moon_strength",
+)
 async def get_moon_strength(
     timestamp: datetime = Query(..., description="Time to check (UTC)")
 ):
@@ -349,7 +369,11 @@ async def get_moon_strength(
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/config")
+@router.get(
+    "/config",
+    summary="Moon config",
+    operation_id="moon_config",
+)
 async def get_moon_config():
     """
     Get current moon configuration

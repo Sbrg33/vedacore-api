@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.logging import get_api_logger
@@ -19,7 +20,7 @@ from api.models.responses import (
     PanchangaExplanationResponse,
 )
 
-router = APIRouter(prefix="/api/v1/panchanga", tags=["panchanga"])
+router = APIRouter(prefix="/api/v1/panchanga", tags=["panchanga"], responses=DEFAULT_ERROR_RESPONSES)
 logger = get_api_logger("panchanga")
 
 
@@ -77,7 +78,12 @@ class PanchangaResponse(BaseModel):
     meta: dict[str, Any]
 
 
-@router.post("/calculate", response_model=PanchangaResponse)
+@router.post(
+    "/calculate",
+    response_model=PanchangaResponse,
+    summary="Calculate Panchanga",
+    operation_id="panchanga_calculate",
+)
 async def calculate_panchanga(request: PanchangaRequest) -> PanchangaResponse:
     """
     Calculate Panchanga using SystemAdapter registry pattern
@@ -139,7 +145,12 @@ async def calculate_panchanga(request: PanchangaRequest) -> PanchangaResponse:
         )
 
 
-@router.get("/health", response_model=PanchangaHealthResponse)
+@router.get(
+    "/health",
+    response_model=PanchangaHealthResponse,
+    summary="Panchanga health",
+    operation_id="panchanga_health",
+)
 async def panchanga_health() -> PanchangaHealthResponse:
     """Check Panchanga adapter health via registry"""
     try:
@@ -161,7 +172,12 @@ async def panchanga_health() -> PanchangaHealthResponse:
         )
 
 
-@router.get("/schema", response_model=PanchangaSchemaResponse)
+@router.get(
+    "/schema",
+    response_model=PanchangaSchemaResponse,
+    summary="Panchanga schema",
+    operation_id="panchanga_schema",
+)
 async def panchanga_schema() -> PanchangaSchemaResponse:
     """Get Panchanga adapter input/output schema"""
     try:
@@ -177,7 +193,12 @@ async def panchanga_schema() -> PanchangaSchemaResponse:
         raise HTTPException(status_code=404, detail=f"Panchanga adapter not found: {e}")
 
 
-@router.post("/explain", response_model=PanchangaExplanationResponse)
+@router.post(
+    "/explain",
+    response_model=PanchangaExplanationResponse,
+    summary="Explain Panchanga",
+    operation_id="panchanga_explain",
+)
 async def explain_panchanga(request: PanchangaRequest) -> PanchangaExplanationResponse:
     """Get explanation of Panchanga results via registry"""
     try:

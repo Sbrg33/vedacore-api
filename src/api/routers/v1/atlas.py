@@ -8,11 +8,12 @@ Supports city lookup, geocoding, and timezone resolution.
 from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field
 
 from .models import BaseResponse, ErrorResponse, PATH_TEMPLATES
 
-router = APIRouter(prefix="/api/v1/atlas", tags=["Atlas"])
+router = APIRouter(prefix="/api/v1/atlas", tags=["atlas"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class GeocodeRequest(BaseModel):
@@ -42,7 +43,12 @@ class GeocodeResponse(BaseModel):
     total_count: int = Field(..., description="Total matches found")
 
 
-@router.post("/resolve", response_model=BaseResponse, summary="Resolve Location")
+@router.post(
+    "/resolve",
+    response_model=BaseResponse,
+    summary="Resolve Location",
+    operation_id="v1_atlas_resolve",
+)
 async def resolve_location(request: GeocodeRequest) -> BaseResponse:
     """
     Resolve location query to coordinates and timezone.
@@ -98,7 +104,12 @@ async def resolve_location(request: GeocodeRequest) -> BaseResponse:
         )
 
 
-@router.get("/cities/{query}", response_model=BaseResponse, summary="Search Cities")
+@router.get(
+    "/cities/{query}",
+    response_model=BaseResponse,
+    summary="Search Cities",
+    operation_id="v1_atlas_cities",
+)
 async def search_cities(
     query: str,
     limit: int = 10,

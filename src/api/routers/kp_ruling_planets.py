@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from constants.kp.types import Planet
@@ -29,7 +30,7 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/kp/rp", tags=["kp-ruling-planets"])
+router = APIRouter(prefix="/api/v1/kp/rp", tags=["kp-ruling-planets"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class PlanetChain(BaseModel):
@@ -146,7 +147,12 @@ def get_correlation_id() -> str:
     return str(uuid.uuid4())[:8]
 
 
-@router.post("/compute", response_model=RulingPlanetsResponse)
+@router.post(
+    "/compute",
+    response_model=RulingPlanetsResponse,
+    summary="Compute Ruling Planets",
+    operation_id="kpRP_compute",
+)
 async def compute_ruling_planets(
     request: RulingPlanetsRequest, correlation_id: str = Depends(get_correlation_id)
 ):
@@ -193,7 +199,11 @@ async def compute_ruling_planets(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/weekday-info/{weekday_idx}")
+@router.get(
+    "/weekday-info/{weekday_idx}",
+    summary="Weekday info",
+    operation_id="kpRP_weekdayInfo",
+)
 async def get_weekday_info(weekday_idx: int):
     """
     Get information about a specific weekday.
@@ -231,7 +241,11 @@ async def get_weekday_info(weekday_idx: int):
     }
 
 
-@router.get("/schema")
+@router.get(
+    "/schema",
+    summary="RP schema",
+    operation_id="kpRP_schema",
+)
 async def get_schema():
     """Get API schema for Ruling Planets endpoints"""
     if advisory_registry is None:
@@ -246,7 +260,11 @@ async def get_schema():
     return adapter.schema()
 
 
-@router.get("/explain")
+@router.get(
+    "/explain",
+    summary="RP explain",
+    operation_id="kpRP_explain",
+)
 async def get_explanation():
     """Get explanation of Ruling Planets calculation logic"""
     if advisory_registry is None:
@@ -261,7 +279,11 @@ async def get_explanation():
     return adapter.explain({})
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="RP health",
+    operation_id="kpRP_health",
+)
 async def health_check():
     """Health check for Ruling Planets service"""
     status = {

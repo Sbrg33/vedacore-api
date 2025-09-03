@@ -7,6 +7,7 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Header, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field, field_validator
 
 from config.feature_flags import get_feature_flags
@@ -19,7 +20,7 @@ from refactor.facade import (
     register_custom_varga_scheme,
 )
 
-router = APIRouter(prefix="/api/v1/varga", tags=["varga"])
+router = APIRouter(prefix="/api/v1/varga", tags=["varga"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class VargaCalculateDirectRequest(BaseModel):
@@ -110,8 +111,25 @@ class CustomVargaRequest(BaseModel):
         return v
 
 
-@router.post("/calculate_direct", summary="Calculate varga from longitudes")
-async def calculate_varga_direct(request: VargaCalculateDirectRequest):
+from api.models.responses import (
+    VargaCalculateDirectResponse,
+    VargaCalculateResponse,
+    VargottamaStatusResponse,
+    ShodasavargaResponse,
+    VargaStrengthResponse,
+    CustomVargaRegisterResponse,
+    VargaSchemesResponse,
+    VargaConfigResponse,
+)
+
+
+@router.post(
+    "/calculate_direct",
+    summary="Calculate varga from longitudes",
+    operation_id="varga_calculateDirect",
+    response_model=VargaCalculateDirectResponse,
+)
+async def calculate_varga_direct(request: VargaCalculateDirectRequest) -> VargaCalculateDirectResponse:
     """Calculate divisional chart positions directly from planet longitudes.
 
     This endpoint is useful when you already have planet positions
@@ -143,8 +161,13 @@ async def calculate_varga_direct(request: VargaCalculateDirectRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/calculate", summary="Calculate varga for timestamp")
-async def calculate_varga(request: VargaCalculateRequest):
+@router.post(
+    "/calculate",
+    summary="Calculate varga for timestamp",
+    operation_id="varga_calculate",
+    response_model=VargaCalculateResponse,
+)
+async def calculate_varga(request: VargaCalculateRequest) -> VargaCalculateResponse:
     """Calculate divisional chart positions for a given timestamp.
 
     Fetches planet positions internally and calculates their varga positions.
@@ -190,8 +213,13 @@ async def calculate_varga(request: VargaCalculateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/vargottama", summary="Detect vargottama planets")
-async def detect_vargottama(request: VargottamaRequest):
+@router.post(
+    "/vargottama",
+    summary="Detect vargottama planets",
+    operation_id="varga_vargottama",
+    response_model=VargottamaStatusResponse,
+)
+async def detect_vargottama(request: VargottamaRequest) -> VargottamaStatusResponse:
     """Check which planets are vargottama (same sign in D1 and varga).
 
     Vargottama planets have enhanced strength and deliver more reliable results.
@@ -240,8 +268,13 @@ async def detect_vargottama(request: VargottamaRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/shodasavarga", summary="Calculate all 16 divisional charts")
-async def calculate_shodasavarga(request: ShodasavargaRequest):
+@router.post(
+    "/shodasavarga",
+    summary="Calculate all 16 divisional charts",
+    operation_id="varga_shodasavarga",
+    response_model=ShodasavargaResponse,
+)
+async def calculate_shodasavarga(request: ShodasavargaRequest) -> ShodasavargaResponse:
     """Calculate all 16 Shodasavarga divisional charts.
 
     Returns positions in all standard divisional charts used in Vedic astrology.
@@ -278,8 +311,13 @@ async def calculate_shodasavarga(request: ShodasavargaRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/strength", summary="Calculate Vimshopaka Bala")
-async def calculate_varga_strength(request: VargaStrengthRequest):
+@router.post(
+    "/strength",
+    summary="Calculate Vimshopaka Bala",
+    operation_id="varga_strength",
+    response_model=VargaStrengthResponse,
+)
+async def calculate_varga_strength(request: VargaStrengthRequest) -> VargaStrengthResponse:
     """Calculate Vimshopaka Bala (composite varga strength) for a planet.
 
     Uses weighted vargottama status across multiple divisional charts.
@@ -339,10 +377,15 @@ async def calculate_varga_strength(request: VargaStrengthRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/register_custom", summary="Register custom varga scheme")
+@router.post(
+    "/register_custom",
+    summary="Register custom varga scheme",
+    operation_id="varga_registerCustom",
+    response_model=CustomVargaRegisterResponse,
+)
 async def register_custom_varga(
     request: CustomVargaRequest, authorization: str | None = Header(None)
-):
+) -> CustomVargaRegisterResponse:
     """Register a custom varga calculation scheme.
 
     Requires authorization for security. Custom schemes are useful
@@ -383,8 +426,13 @@ async def register_custom_varga(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/schemes", summary="List available varga schemes")
-async def list_varga_schemes():
+@router.get(
+    "/schemes",
+    summary="List available varga schemes",
+    operation_id="varga_listSchemes",
+    response_model=VargaSchemesResponse,
+)
+async def list_varga_schemes() -> VargaSchemesResponse:
     """Get list of all available varga calculation schemes.
 
     Includes both classical and custom registered schemes.
@@ -408,8 +456,13 @@ async def list_varga_schemes():
     }
 
 
-@router.get("/config", summary="Get varga configuration")
-async def get_varga_configuration():
+@router.get(
+    "/config",
+    summary="Get varga configuration",
+    operation_id="varga_getConfig",
+    response_model=VargaConfigResponse,
+)
+async def get_varga_configuration() -> VargaConfigResponse:
     """Get current varga system configuration.
 
     Shows enabled features, classical scheme mappings, and limits.

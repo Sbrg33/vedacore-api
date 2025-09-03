@@ -11,8 +11,16 @@ from datetime import datetime, UTC
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, Field, field_validator
+from api.models.responses import (
+    NodeEvent,
+    NodeNextEventResponse,
+    NodeStatisticsResponse,
+    NodeConfigResponse,
+    NodeSystemsResponse,
+)
 
 from app.services.cache_service import CacheService
 from app.utils.hash_keys import cache_key_hash
@@ -23,7 +31,7 @@ from refactor.time_utils import validate_utc_datetime
 logger = logging.getLogger(__name__)
 
 # Initialize router
-router = APIRouter(prefix="/api/v1", tags=["nodes"])
+router = APIRouter(prefix="/api/v1", tags=["nodes"], responses=DEFAULT_ERROR_RESPONSES)
 
 # Initialize cache service
 cache_service = CacheService()
@@ -131,8 +139,13 @@ def generate_cache_key(prefix: str, **kwargs) -> str:
     return key_str
 
 
-@router.post("/nodes/events", response_model=list[dict[str, Any]])
-async def get_node_events(request: NodeEventsRequest) -> list[dict[str, Any]]:
+@router.post(
+    "/nodes/events",
+    response_model=list[NodeEvent],
+    summary="List node events",
+    operation_id="nodes_events",
+)
+async def get_node_events(request: NodeEventsRequest) -> list[NodeEvent]:
     """
     Get node events (stationary, direction changes) in a time range.
 
@@ -211,7 +224,12 @@ async def get_node_events(request: NodeEventsRequest) -> list[dict[str, Any]]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/nodes/now", response_model=NodeStateResponse)
+@router.get(
+    "/nodes/now",
+    response_model=NodeStateResponse,
+    summary="Current node state",
+    operation_id="nodes_now",
+)
 async def get_current_node_state(
     system: str = Query("KP_NODES", description="Node system"),
     timestamp: datetime | None = Query(None, description="Timestamp (default: now)"),
@@ -274,14 +292,19 @@ async def get_current_node_state(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/nodes/next-event")
+@router.get(
+    "/nodes/next-event",
+    response_model=NodeNextEventResponse,
+    summary="Find next node event",
+    operation_id="nodes_nextEvent",
+)
 async def get_next_event(
     event_type: str | None = Query(None, description="Specific event type to find"),
     from_time: datetime | None = Query(
         None, description="Start searching from (default: now)"
     ),
     max_days: int = Query(30, description="Maximum days to search", ge=1, le=365),
-) -> dict[str, Any]:
+) -> NodeNextEventResponse:
     """
     Find the next node event of a specific type.
 
@@ -353,11 +376,16 @@ async def get_next_event(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/nodes/statistics")
+@router.post(
+    "/nodes/statistics",
+    response_model=NodeStatisticsResponse,
+    summary="Node statistics",
+    operation_id="nodes_statistics",
+)
 async def get_node_statistics(
     start: datetime = Body(..., description="Start of analysis period"),
     end: datetime = Body(..., description="End of analysis period"),
-) -> dict[str, Any]:
+) -> NodeStatisticsResponse:
     """
     Get statistical analysis of node behavior over a period.
 
@@ -403,8 +431,13 @@ async def get_node_statistics(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/nodes/config")
-async def get_node_configuration() -> dict[str, Any]:
+@router.get(
+    "/nodes/config",
+    response_model=NodeConfigResponse,
+    summary="Node configuration",
+    operation_id="nodes_config",
+)
+async def get_node_configuration() -> NodeConfigResponse:
     """
     Get current node detection configuration.
 
@@ -441,8 +474,13 @@ async def get_node_configuration() -> dict[str, Any]:
     }
 
 
-@router.get("/nodes/systems")
-async def list_node_systems() -> dict[str, Any]:
+@router.get(
+    "/nodes/systems",
+    response_model=NodeSystemsResponse,
+    summary="List node systems",
+    operation_id="nodes_systems",
+)
+async def list_node_systems() -> NodeSystemsResponse:
     """
     List available node systems and their capabilities.
     """

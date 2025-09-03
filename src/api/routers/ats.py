@@ -12,6 +12,7 @@ Notes:
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field, field_validator
 
 from app.services.ats_service import ATSService
@@ -25,7 +26,7 @@ from api.models.responses import (
 )
 
 # Initialize router following project conventions
-router = APIRouter(prefix="/api/v1/ats", tags=["ATS"])
+router = APIRouter(prefix="/api/v1/ats", tags=["ats"], responses=DEFAULT_ERROR_RESPONSES)
 
 # Initialize service (singleton)
 service = ATSService()
@@ -132,7 +133,12 @@ class ATSResponse(BaseModel):
     )
 
 
-@router.post("/transit", response_model=ATSResponse)
+@router.post(
+    "/transit",
+    response_model=ATSResponse,
+    summary="Single ATS transit",
+    operation_id="ats_transit",
+)
 @require_feature("ats")
 async def calculate_transit(request: ATSTransitRequest):
     """
@@ -152,7 +158,12 @@ async def calculate_transit(request: ATSTransitRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/batch", response_model=ATSBatchResponse)
+@router.post(
+    "/batch",
+    response_model=ATSBatchResponse,
+    summary="Batch ATS scores",
+    operation_id="ats_batch",
+)
 @require_feature("ats")
 async def calculate_batch(request: ATSBatchRequest) -> ATSBatchResponse:
     """
@@ -181,7 +192,12 @@ async def calculate_batch(request: ATSBatchRequest) -> ATSBatchResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/config", response_model=ATSConfigResponse)
+@router.get(
+    "/config",
+    response_model=ATSConfigResponse,
+    summary="ATS configuration",
+    operation_id="ats_config",
+)
 @require_feature("ats")
 async def get_config() -> ATSConfigResponse:
     """
@@ -196,7 +212,12 @@ async def get_config() -> ATSConfigResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/validate", response_model=ATSValidationResponse)
+@router.get(
+    "/validate",
+    response_model=ATSValidationResponse,
+    summary="Validate ATS scores",
+    operation_id="ats_validate",
+)
 @require_feature("ats")
 async def validate_scores(
     timestamp: datetime | None = Query(
@@ -220,7 +241,12 @@ async def validate_scores(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/status", response_model=ATSStatusResponse)
+@router.get(
+    "/status",
+    response_model=ATSStatusResponse,
+    summary="ATS status",
+    operation_id="ats_status",
+)
 @require_feature("ats")
 async def get_status() -> ATSStatusResponse:
     """
@@ -255,14 +281,23 @@ async def get_status() -> ATSStatusResponse:
 
 
 # Backward compatibility endpoints (will deprecate)
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="ATS health (deprecated)",
+    operation_id="ats_health",
+)
 @require_feature("ats")
 async def health_check():
     """Check ATS service health (deprecated - use /status)"""
     return await get_status()
 
 
-@router.get("/contexts", response_model=ATSContextsResponse)
+@router.get(
+    "/contexts",
+    response_model=ATSContextsResponse,
+    summary="ATS contexts",
+    operation_id="ats_contexts",
+)
 @require_feature("ats")
 async def list_contexts() -> ATSContextsResponse:
     """List available ATS contexts"""

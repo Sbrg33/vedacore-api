@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -23,7 +24,7 @@ from refactor.time_utils import validate_utc_datetime
 logger = logging.getLogger(__name__)
 
 # Initialize router
-router = APIRouter(prefix="/api/v1", tags=["dasha"])
+router = APIRouter(prefix="/api/v1", tags=["dasha"], responses=DEFAULT_ERROR_RESPONSES)
 
 # Initialize cache service
 cache_service = CacheService()
@@ -167,8 +168,21 @@ def generate_cache_key(prefix: str, **kwargs) -> str:
     return key_str
 
 
-@router.post("/dasha", response_model=dict[str, Any])
-async def calculate_dasha(request: DashaRequest) -> dict[str, Any]:
+from api.models.responses import (
+    DashaSnapshotResponse,
+    DashaChangeEvent,
+    DashaCycleResponse,
+    DashaBirthBalanceResponse,
+)
+
+
+@router.post(
+    "/dasha",
+    response_model=DashaSnapshotResponse,
+    summary="Current dasha snapshot",
+    operation_id="dasha_snapshot",
+)
+async def calculate_dasha(request: DashaRequest) -> DashaSnapshotResponse:
     """
     Calculate current Vimshottari Dasha periods.
 
@@ -249,8 +263,13 @@ async def calculate_dasha(request: DashaRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/dasha/changes", response_model=list[dict[str, Any]])
-async def get_dasha_changes(request: DashaChangesRequest) -> list[dict[str, Any]]:
+@router.post(
+    "/dasha/changes",
+    response_model=list[DashaChangeEvent],
+    summary="Dasha changes on date",
+    operation_id="dasha_changes",
+)
+async def get_dasha_changes(request: DashaChangesRequest) -> list[DashaChangeEvent]:
     """
     Get all dasha transitions occurring on a specific date.
 
@@ -333,8 +352,13 @@ async def get_dasha_changes(request: DashaChangesRequest) -> list[dict[str, Any]
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/dasha/cycle", response_model=dict[str, Any])
-async def get_full_cycle(request: DashaCycleRequest) -> dict[str, Any]:
+@router.post(
+    "/dasha/cycle",
+    response_model=DashaCycleResponse,
+    summary="Full dasha cycle",
+    operation_id="dasha_cycle",
+)
+async def get_full_cycle(request: DashaCycleRequest) -> DashaCycleResponse:
     """
     Get full 120-year Vimshottari cycle with nested periods.
 
@@ -413,13 +437,18 @@ async def get_full_cycle(request: DashaCycleRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/dasha/balance", response_model=dict[str, Any])
+@router.post(
+    "/dasha/balance",
+    response_model=DashaBirthBalanceResponse,
+    summary="Birth dasha balance",
+    operation_id="dasha_birthBalance",
+)
 async def get_birth_balance(
     birth_time: datetime = Body(..., description="Birth UTC timestamp"),
     moon_longitude: float | None = Body(
         None, description="Pre-calculated Moon longitude", ge=0, le=360
     ),
-) -> dict[str, Any]:
+) -> DashaBirthBalanceResponse:
     """
     Get birth balance dasha information.
 
@@ -464,7 +493,11 @@ async def get_birth_balance(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/dasha/systems")
+@router.get(
+    "/dasha/systems",
+    summary="List supported dasha systems",
+    operation_id="dasha_systems",
+)
 async def list_dasha_systems() -> dict[str, Any]:
     """
     List available dasha systems and their capabilities.

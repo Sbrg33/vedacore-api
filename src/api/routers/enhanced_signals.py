@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from sse_starlette.sse import EventSourceResponse
 
 from app.models.requests import EnhancedSignalsRequest, SignalStreamRequest
@@ -40,7 +41,7 @@ from api.services.stream_manager import stream_manager
 from refactor.monitoring import Timer
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/signals", tags=["enhanced-signals"])
+router = APIRouter(prefix="/signals", tags=["enhanced-signals"], responses=DEFAULT_ERROR_RESPONSES)
 
 # Stream topics for enhanced signals
 SIGNAL_TOPICS = {
@@ -50,7 +51,12 @@ SIGNAL_TOPICS = {
 }
 
 
-@router.post("/intraday-enhanced", response_model=EnhancedSignalsResponse)
+@router.post(
+    "/intraday-enhanced",
+    response_model=EnhancedSignalsResponse,
+    summary="Enhanced intraday signals",
+    operation_id="enhancedSignals_intraday",
+)
 async def get_enhanced_intraday_signals(
     request: EnhancedSignalsRequest,
     background_tasks: BackgroundTasks,
@@ -192,11 +198,29 @@ async def get_enhanced_intraday_signals(
         )
 
 
-@router.get("/stream/enhanced")
+from api.models.responses import EnhancedInvalidateResponse, EnhancedSignalsHealthResponse, Problem
+
+
+@router.get(
+    "/stream/enhanced",
+    summary="SSE enhanced signals",
+    operation_id="enhancedSignals_stream",
+    responses={
+        200: {"content": {"text/event-stream": {}}},
+        429: {
+            "model": Problem,
+            "description": "Too many requests",
+            "headers": {
+                "Retry-After": {"schema": {"type": "integer"}},
+            },
+        },
+    },
+)
 async def stream_enhanced_signals(
     timeframes: str = Query(default="1m,5m", description="Comma-separated timeframes"),
     planet_ids: str = Query(default="2", description="Comma-separated planet IDs"),
     confluence_threshold: int = Query(default=3, ge=2, le=10),
+    token: str = Query(..., description="JWT stream token (EventSource)"),
     auth_context: AuthContext = Depends(require_jwt_query)
 ) -> EventSourceResponse:
     """
@@ -335,7 +359,12 @@ async def stream_enhanced_signals(
         raise HTTPException(status_code=500, detail=f"Failed to setup signal streaming: {e}")
 
 
-@router.get("/performance", response_model=PerformanceStatsResponse)
+@router.get(
+    "/performance",
+    response_model=PerformanceStatsResponse,
+    summary="Enhanced performance stats",
+    operation_id="enhancedSignals_performance",
+)
 async def get_performance_stats(
     auth_context: AuthContext = Depends(require_jwt_query)
 ) -> PerformanceStatsResponse:
@@ -380,12 +409,17 @@ async def get_performance_stats(
         raise HTTPException(status_code=500, detail="Failed to retrieve performance statistics")
 
 
-@router.post("/invalidate-cache")
+@router.post(
+    "/invalidate-cache",
+    response_model=EnhancedInvalidateResponse,
+    summary="Invalidate signal cache",
+    operation_id="enhancedSignals_invalidateCache",
+)
 async def invalidate_signal_cache(
     date: str = Query(..., description="Date to invalidate (YYYY-MM-DD)"),
     planet_id: int = Query(None, description="Specific planet ID to invalidate"),
     auth_context: AuthContext = Depends(require_jwt_query)
-) -> Dict[str, Any]:
+) -> EnhancedInvalidateResponse:
     """
     Manually invalidate signal cache for a specific date/planet.
     
@@ -430,8 +464,13 @@ async def invalidate_signal_cache(
         raise HTTPException(status_code=500, detail=f"Cache invalidation failed: {str(e)}")
 
 
-@router.get("/health")
-async def enhanced_signals_health() -> Dict[str, Any]:
+@router.get(
+    "/health",
+    response_model=EnhancedSignalsHealthResponse,
+    summary="Enhanced signals health",
+    operation_id="enhancedSignals_health",
+)
+async def enhanced_signals_health() -> EnhancedSignalsHealthResponse:
     """
     Health check for enhanced signals service.
     

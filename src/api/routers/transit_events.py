@@ -29,7 +29,7 @@ from api.models.responses import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/transit-events", tags=["Transit Events"])
+router = APIRouter(prefix="/api/v1/transit-events", tags=["transit"])
 
 
 # Request/Response Models
@@ -95,7 +95,12 @@ def get_event_detector() -> TransitEventDetector:
     return _event_detector
 
 
-@router.post("/detect", response_model=EventResponse)
+@router.post(
+    "/detect",
+    response_model=EventResponse,
+    summary="Detect transit events",
+    operation_id="transit_detect",
+)
 @require_feature(FeatureFlags.ENABLE_TRANSIT_EVENTS)
 async def detect_events(request: DetectEventsRequest) -> EventResponse:
     """
@@ -200,7 +205,12 @@ async def detect_events(request: DetectEventsRequest) -> EventResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/moon-triggers", response_model=EventResponse)
+@router.post(
+    "/moon-triggers",
+    response_model=EventResponse,
+    summary="Moon triggers",
+    operation_id="transit_moonTriggers",
+)
 @require_feature(FeatureFlags.ENABLE_TRANSIT_EVENTS)
 async def get_moon_triggers(request: MoonTriggersRequest) -> EventResponse:
     """
@@ -277,7 +287,12 @@ async def get_moon_triggers(request: MoonTriggersRequest) -> EventResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/gates", response_model=TransitGatesResponse)
+@router.get(
+    "/gates",
+    response_model=TransitGatesResponse,
+    summary="Get gates",
+    operation_id="transit_gates",
+)
 @require_feature(FeatureFlags.ENABLE_MOON_GATES)
 async def get_gates(
     ts: datetime = Query(..., description="UTC timestamp"),
@@ -342,7 +357,12 @@ async def get_gates(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/promise-check", response_model=TransitPromiseCheckResponse)
+@router.post(
+    "/promise-check",
+    response_model=TransitPromiseCheckResponse,
+    summary="Promise check",
+    operation_id="transit_promiseCheck",
+)
 @require_feature(FeatureFlags.ENABLE_PROMISE_CHECK)
 async def check_promise(request: PromiseCheckRequest) -> TransitPromiseCheckResponse:
     """
@@ -386,7 +406,12 @@ async def check_promise(request: PromiseCheckRequest) -> TransitPromiseCheckResp
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/config", response_model=TransitConfigResponse)
+@router.get(
+    "/config",
+    response_model=TransitConfigResponse,
+    summary="Transit config",
+    operation_id="transit_config",
+)
 async def get_config() -> TransitConfigResponse:
     """Get current transit event configuration and feature flags."""
     return TransitConfigResponse(
@@ -408,7 +433,12 @@ async def get_config() -> TransitConfigResponse:
     )
 
 
-@router.get("/health", response_model=TransitHealthResponse)
+@router.get(
+    "/health",
+    response_model=TransitHealthResponse,
+    summary="Transit health",
+    operation_id="transit_health",
+)
 async def health_check() -> TransitHealthResponse:
     """Health check for transit event system."""
     try:

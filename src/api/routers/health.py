@@ -36,7 +36,12 @@ from api.models.responses import (
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health/live", response_model=HealthStatus)
+@router.get(
+    "/health/live",
+    response_model=HealthStatus,
+    summary="Liveness",
+    operation_id="health_live",
+)
 async def liveness_check() -> HealthStatus:
     """
     Kubernetes liveness probe endpoint.
@@ -51,7 +56,12 @@ async def liveness_check() -> HealthStatus:
     )
 
 
-@router.get("/health/up", response_class=PlainTextResponse)
+@router.get(
+    "/health/up",
+    response_class=PlainTextResponse,
+    summary="Up",
+    operation_id="health_up",
+)
 async def health_up() -> PlainTextResponse:
     """Ultra‑simple plaintext liveness for external monitors.
 
@@ -134,6 +144,8 @@ async def _check_core_dependencies() -> dict[str, DependencyCheck]:
         200: {"description": "Service is ready"},
         503: {"description": "Service is not ready"},
     },
+    summary="Readiness",
+    operation_id="health_ready",
 )
 async def readiness_check() -> ReadinessResponse:
     """
@@ -192,7 +204,12 @@ async def readiness_check() -> ReadinessResponse:
         return response
 
 
-@router.get("/health/metrics", response_model=MetricsResponse)
+@router.get(
+    "/health/metrics",
+    response_model=MetricsResponse,
+    summary="Metrics",
+    operation_id="health_metrics",
+)
 async def metrics_endpoint() -> MetricsResponse:
     """
     Get current metrics snapshot for monitoring.
@@ -216,7 +233,12 @@ async def metrics_endpoint() -> MetricsResponse:
         )
 
 
-@router.get("/health/version", response_model=VersionResponse)
+@router.get(
+    "/health/version",
+    response_model=VersionResponse,
+    summary="Version",
+    operation_id="health_version",
+)
 async def version_info() -> VersionResponse:
     """
     Get version and environment information.
@@ -260,6 +282,8 @@ async def version_info() -> VersionResponse:
         200: {"description": "Startup checks passed"},
         503: {"description": "Startup checks failed"},
     },
+    summary="Startup checks",
+    operation_id="health_startup",
 )
 async def startup_check() -> StartupResponse:
     """

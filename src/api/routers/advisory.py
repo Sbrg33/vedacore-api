@@ -5,6 +5,7 @@ API endpoints for Vedic/KP/Jaimini advisory layers.
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field
 
 from app.services.advisory_service import get_advisory_service
@@ -17,7 +18,7 @@ from api.models.responses import (
     AdvisoryHealthResponse,
 )
 
-router = APIRouter(prefix="/api/v1/advisory", tags=["advisory"])
+router = APIRouter(prefix="/api/v1/advisory", tags=["advisory"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class AdvisoryRequest(BaseModel):
@@ -50,7 +51,12 @@ class RulingPlanetsRequest(BaseModel):
     sunrise: datetime | None = Field(None, description="Sunrise time (UTC)")
 
 
-@router.post("/snapshot", summary="Get advisory snapshot at timestamp", response_model=AdvisorySnapshotResponse)
+@router.post(
+    "/snapshot",
+    summary="Get advisory snapshot at timestamp",
+    response_model=AdvisorySnapshotResponse,
+    operation_id="advisory_snapshot",
+)
 async def get_advisory_snapshot(request: AdvisoryRequest) -> AdvisorySnapshotResponse:
     """Get all enabled advisory calculations for a specific moment.
 
@@ -83,7 +89,12 @@ async def get_advisory_snapshot(request: AdvisoryRequest) -> AdvisorySnapshotRes
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/range", summary="Get advisory data for time range", response_model=AdvisoryRangeResponse)
+@router.post(
+    "/range",
+    summary="Get advisory data for time range",
+    response_model=AdvisoryRangeResponse,
+    operation_id="advisory_range",
+)
 async def get_advisory_range(request: AdvisoryRangeRequest) -> AdvisoryRangeResponse:
     """Get advisory snapshots over a time range.
 
@@ -131,7 +142,12 @@ async def get_advisory_range(request: AdvisoryRangeRequest) -> AdvisoryRangeResp
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/features", summary="Get feature flag status", response_model=FeatureStatusResponse)
+@router.get(
+    "/features",
+    summary="Get feature flag status",
+    response_model=FeatureStatusResponse,
+    operation_id="advisory_features",
+)
 async def get_feature_status() -> FeatureStatusResponse:
     """Get current status of advisory feature flags.
 
@@ -151,7 +167,12 @@ async def get_feature_status() -> FeatureStatusResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/ruling-planets", summary="Calculate KP Ruling Planets", response_model=RulingPlanetsResponse)
+@router.post(
+    "/ruling-planets",
+    summary="Calculate KP Ruling Planets",
+    response_model=RulingPlanetsResponse,
+    operation_id="advisory_rulingPlanets",
+)
 async def calculate_ruling_planets(request: RulingPlanetsRequest) -> RulingPlanetsResponse:
     """Calculate KP Ruling Planets for a given moment.
 
@@ -194,7 +215,12 @@ async def calculate_ruling_planets(request: RulingPlanetsRequest) -> RulingPlane
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/shadbala", summary="Calculate Shadbala strength", response_model=ShadbalaResponse)
+@router.post(
+    "/shadbala",
+    summary="Calculate Shadbala strength",
+    response_model=ShadbalaResponse,
+    operation_id="advisory_shadbala",
+)
 async def calculate_shadbala(request: AdvisoryRequest) -> ShadbalaResponse:
     """Calculate six-fold planetary strength (Shadbala).
 
@@ -236,7 +262,12 @@ async def calculate_shadbala(request: AdvisoryRequest) -> ShadbalaResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/health", summary="Advisory service health check", response_model=AdvisoryHealthResponse)
+@router.get(
+    "/health",
+    summary="Advisory service health check",
+    response_model=AdvisoryHealthResponse,
+    operation_id="advisory_health",
+)
 async def health_check() -> AdvisoryHealthResponse:
     """Check advisory service health and configuration."""
     try:

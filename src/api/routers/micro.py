@@ -23,6 +23,7 @@ from api.models.responses import (
     MicroInstantResponse,
     MicroConfigResponse,
 )
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 
 logger = logging.getLogger(__name__)
 UTC = UTC
@@ -54,8 +55,8 @@ micro_errors = Counter(
 
 router = APIRouter(
     prefix="/api/v1/micro",
-    tags=["micro-timing"],
-    responses={404: {"description": "Not found"}},
+    tags=["micro"],
+    responses={**DEFAULT_ERROR_RESPONSES, 404: {"description": "Not found"}},
 )
 
 Strength = Literal["low", "medium", "high"]
@@ -121,7 +122,12 @@ class InstantRequest(BaseModel):
             raise ValueError(f"Invalid timestamp format: {v}")
 
 
-@router.post("/day", summary="Get volatility windows for a day", response_model=MicroDayResponse)
+@router.post(
+    "/day",
+    summary="Get volatility windows for a day",
+    response_model=MicroDayResponse,
+    operation_id="micro_day",
+)
 async def micro_day(req: DayRequest = Body(...)) -> MicroDayResponse:
     """
     Generate volatility windows for a single day.
@@ -174,7 +180,12 @@ async def micro_day(req: DayRequest = Body(...)) -> MicroDayResponse:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/range", summary="Get volatility windows for date range", response_model=MicroRangeResponse)
+@router.post(
+    "/range",
+    summary="Get volatility windows for date range",
+    response_model=MicroRangeResponse,
+    operation_id="micro_range",
+)
 async def micro_range(req: RangeRequest = Body(...)) -> MicroRangeResponse:
     """
     Generate volatility windows for a date range.
@@ -228,7 +239,12 @@ async def micro_range(req: RangeRequest = Body(...)) -> MicroRangeResponse:
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/next", summary="Find next volatility window", response_model=MicroNextResponse)
+@router.get(
+    "/next",
+    summary="Find next volatility window",
+    response_model=MicroNextResponse,
+    operation_id="micro_next",
+)
 async def micro_next(
     system: str = Query(default="KP_MICRO", description="System identifier"),
     threshold: Strength = Query(
@@ -274,7 +290,12 @@ async def micro_next(
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.post("/instant", summary="Get instantaneous volatility score", response_model=MicroInstantResponse)
+@router.post(
+    "/instant",
+    summary="Get instantaneous volatility score",
+    response_model=MicroInstantResponse,
+    operation_id="micro_instant",
+)
 async def micro_instant(req: InstantRequest = Body(...)) -> MicroInstantResponse:
     """
     Calculate volatility score at a specific timestamp.
@@ -323,7 +344,12 @@ async def micro_instant(req: InstantRequest = Body(...)) -> MicroInstantResponse
         raise HTTPException(status_code=500, detail=f"Internal error: {e!s}")
 
 
-@router.get("/config", summary="Get micro-timing configuration", response_model=MicroConfigResponse)
+@router.get(
+    "/config",
+    summary="Get micro-timing configuration",
+    response_model=MicroConfigResponse,
+    operation_id="micro_config",
+)
 async def micro_config(system: str = Query(default="KP_MICRO")) -> MicroConfigResponse:
     """
     Get current micro-timing configuration and metadata.

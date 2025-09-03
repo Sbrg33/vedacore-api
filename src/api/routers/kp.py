@@ -9,7 +9,17 @@ from enum import Enum
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, ConfigDict, Field
+from api.models.responses import (
+    KPAnalysisResponse,
+    KPHousePromisesResponse,
+    KPPlanetSignificationsResponse,
+    KPCuspalSublordsResponse,
+    KPSignificatorsResponse,
+    KPConfigResponse,
+)
+from api.models.responses import HorarySignificatorsResponse
 
 from refactor.facade import (
     get_house_promises,
@@ -28,7 +38,7 @@ from refactor.kp_context import (
 # Initialize KP configuration on module load
 initialize_kp_config()
 
-router = APIRouter(prefix="/api/v1/kp", tags=["KP Analysis"])
+router = APIRouter(prefix="/api/v1/kp", tags=["kp"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 class KPMode(str, Enum):
@@ -146,8 +156,13 @@ class SignificatorRequest(BaseModel):
     min_strength: float = Field(25.0, description="Minimum significator strength")
 
 
-@router.post("/analysis", response_model=dict[str, Any])
-async def complete_kp_analysis(request: KPAnalysisRequest) -> dict[str, Any]:
+@router.post(
+    "/analysis",
+    response_model=KPAnalysisResponse,
+    summary="Run full KP analysis",
+    operation_id="kp_runAnalysis",
+)
+async def complete_kp_analysis(request: KPAnalysisRequest) -> KPAnalysisResponse:
     """
     Perform complete KP astrological analysis.
 
@@ -221,8 +236,13 @@ async def complete_kp_analysis(request: KPAnalysisRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/house-promises", response_model=dict[str, Any])
-async def get_house_promise_analysis(request: HousePromiseRequest) -> dict[str, Any]:
+@router.post(
+    "/house-promises",
+    response_model=KPHousePromisesResponse,
+    summary="Analyze house promises",
+    operation_id="kp_housePromises",
+)
+async def get_house_promise_analysis(request: HousePromiseRequest) -> KPHousePromisesResponse:
     """
     Get what a specific house promises based on its cuspal sub-lord.
 
@@ -248,10 +268,15 @@ async def get_house_promise_analysis(request: HousePromiseRequest) -> dict[str, 
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/planet-significations", response_model=dict[str, Any])
+@router.post(
+    "/planet-significations",
+    response_model=KPPlanetSignificationsResponse,
+    summary="Analyze planet significations",
+    operation_id="kp_planetSignifications",
+)
 async def get_planet_signification_analysis(
     request: PlanetSignificationRequest,
-) -> dict[str, Any]:
+) -> KPPlanetSignificationsResponse:
     """
     Get which houses a planet signifies in the chart.
 
@@ -278,8 +303,13 @@ async def get_planet_signification_analysis(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/cuspal-sublords", response_model=dict[str, Any])
-async def get_cuspal_sublords(request: CuspalAnalysisRequest) -> dict[str, Any]:
+@router.post(
+    "/cuspal-sublords",
+    response_model=KPCuspalSublordsResponse,
+    summary="Cuspal sub-lords",
+    operation_id="kp_cuspalSublords",
+)
+async def get_cuspal_sublords(request: CuspalAnalysisRequest) -> KPCuspalSublordsResponse:
     """
     Get cuspal sub-lords for all or specific houses.
 
@@ -320,8 +350,13 @@ async def get_cuspal_sublords(request: CuspalAnalysisRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/significators", response_model=dict[str, Any])
-async def get_significator_analysis(request: SignificatorRequest) -> dict[str, Any]:
+@router.post(
+    "/significators",
+    response_model=KPSignificatorsResponse,
+    summary="Significator hierarchy",
+    operation_id="kp_significators",
+)
+async def get_significator_analysis(request: SignificatorRequest) -> KPSignificatorsResponse:
     """
     Get KP significator hierarchy for houses or planets.
 
@@ -379,8 +414,13 @@ async def get_significator_analysis(request: SignificatorRequest) -> dict[str, A
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/config", response_model=dict[str, Any])
-async def get_kp_configuration() -> dict[str, Any]:
+@router.get(
+    "/config",
+    response_model=KPConfigResponse,
+    summary="KP configuration",
+    operation_id="kp_getConfig",
+)
+async def get_kp_configuration() -> KPConfigResponse:
     """Get current KP configuration settings"""
     config = get_kp_config()
 
@@ -414,7 +454,11 @@ async def get_kp_configuration() -> dict[str, Any]:
     }
 
 
-@router.get("/horary/{number}", response_model=dict[str, Any])
+@router.get(
+    "/horary/{number}",
+    response_model=HorarySignificatorsResponse,
+    operation_id="kp_horarySignificators",
+)
 async def get_horary_significators(
     number: int = Query(..., ge=1, le=249, description="KP horary number (1-249)")
 ) -> dict[str, Any]:
@@ -474,7 +518,12 @@ async def get_horary_significators(
     }
 
 
-@router.get("/life-matters", response_model=list[str])
+@router.get(
+    "/life-matters",
+    response_model=list[str],
+    summary="List available life matters",
+    operation_id="kp_lifeMatters",
+)
 async def get_available_life_matters() -> list[str]:
     """Get list of life matters available for analysis"""
     from refactor.kp_house_groups import LifeMatter

@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from starlette.responses import StreamingResponse
 
 # Optional Prometheus instrumentation (safe if not installed)
@@ -22,7 +23,7 @@ try:
 except Exception:  # pragma: no cover - optional dep
     Counter = Gauge = Histogram = None  # type: ignore
 
-router = APIRouter(tags=["Location Features Stream"])
+router = APIRouter(tags=["stream"], responses=DEFAULT_ERROR_RESPONSES)
 
 # Metrics
 REQS = (
@@ -80,7 +81,12 @@ def _sse_pack(event: str, data: dict, event_id: str | None = None) -> str:
     return "\n".join(buf) + "\n"
 
 
-@router.get("/api/v1/location/features/stream")
+@router.get(
+    "/api/v1/location/features/stream",
+    summary="SSE stream of location features",
+    operation_id="location_features_stream",
+    responses={200: {"content": {"text/event-stream": {}}}},
+)
 async def stream_location_features(
     request: Request,
     response: Response,

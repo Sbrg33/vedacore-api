@@ -24,21 +24,23 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from sse_starlette.sse import EventSourceResponse
 
 from ..services.auth import AuthContext, require_jwt_query
+from api.models.responses import Problem
 from ..services.rate_limiter import log_rate_limit_violation, rate_limiter
 from ..services.stream_manager import stream_manager
 
 # Import metrics for monitoring
 try:
-    from ..services.metrics import streaming_metrics
+from ..services.metrics import streaming_metrics
 
     METRICS_AVAILABLE = True
 except ImportError:
     METRICS_AVAILABLE = False
 
-router = APIRouter(prefix="/stream", tags=["stream"])
+router = APIRouter(prefix="/stream", tags=["stream"], responses=DEFAULT_ERROR_RESPONSES)
 
 # Dev-only publishing token (disabled in production)
 DEV_PUBLISH_ENABLED = os.getenv("STREAM_DEV_PUBLISH_ENABLED", "true").lower() == "true"
@@ -54,10 +56,29 @@ ALLOWED_TOPICS = (
 )
 
 
-@router.get("/{topic}")
+@router.get(
+    "/{topic}",
+    summary="SSE stream for a topic",
+    operation_id="stream_sse_topic",
+    responses={
+        200: {"content": {"text/event-stream": {}}},
+        429: {
+            "model": Problem,
+            "description": "Too many requests",
+            "headers": {
+                "X-RateLimit-Limit": {"schema": {"type": "integer"}},
+                "X-RateLimit-Remaining": {"schema": {"type": "integer"}},
+                "Retry-After": {"schema": {"type": "integer", "description": "Seconds"}},
+            },
+        },
+    },
+)
 async def stream_topic(
     topic: str,
     request: Request,
+    token: str = Query(
+        ..., description="JWT stream token (query param)"
+    ),
     auth_context: AuthContext = Depends(require_jwt_query),  # Browser-compatible auth
 ) -> EventSourceResponse:
     """
@@ -174,10 +195,13 @@ async def stream_topic(
     )
 
 
-@router.get("/_stats")
+from api.models.responses import StreamStatsResponse, StreamHealthResponse
+
+
+@router.get("/_stats", response_model=StreamStatsResponse, operation_id="stream_stats")
 async def stream_stats(
     request: Request, auth_context: AuthContext = Depends(require_jwt_query)
-) -> dict[str, Any]:
+) -> StreamStatsResponse:
     """
     Get streaming statistics for debugging and monitoring.
 
@@ -232,7 +256,11 @@ async def stream_stats(
         raise
 
 
-@router.post("/_dev_publish/{topic}")
+@router.post(
+    "/_dev_publish/{topic}",
+    summary="Dev publish",
+    operation_id="stream_devPublish",
+)
 async def dev_publish(
     topic: str,
     payload: dict[str, Any],
@@ -287,7 +315,11 @@ async def dev_publish(
         raise HTTPException(status_code=500, detail=f"Failed to publish message: {e}")
 
 
-@router.post("/publish/{topic}")
+@router.post(
+    "/publish/{topic}",
+    summary="JWT publish",
+    operation_id="stream_jwtPublish",
+)
 async def jwt_publish(
     topic: str,
     payload: dict[str, Any],
@@ -394,8 +426,8 @@ async def jwt_publish(
         raise HTTPException(status_code=500, detail=f"Failed to publish message: {e}")
 
 
-@router.get("/_health")
-async def stream_health() -> dict[str, Any]:
+@router.get("/_health", response_model=StreamHealthResponse, operation_id="stream_health")
+async def stream_health() -> StreamHealthResponse:
     """
     Health check endpoint for streaming service.
 
