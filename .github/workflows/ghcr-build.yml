@@ -58,7 +58,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.REPOSITORY_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
           event-type: build-complete
           client-payload: |
             {
