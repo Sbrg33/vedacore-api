@@ -34,8 +34,7 @@ jobs:
     # Deploy on manual dispatch or auto-deploy via repository_dispatch from main branch builds
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'repository_dispatch' &&
-       github.event.action == 'build-complete')
+      github.event_name == 'repository_dispatch'
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
       url: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging') && 'https://staging.api.vedacore.io' || 'https://api.vedacore.io' }}
