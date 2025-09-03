@@ -8,7 +8,7 @@ is not available. This updates:
  - SSE endpoints to advertise text/event-stream and token query parameter
 
 Usage:
-  OPENAPI_VERSION=1.1.0 OPENAPI_PUBLIC_URL=/ python tools/patch_openapi.py
+  OPENAPI_VERSION=1.1.2 OPENAPI_PUBLIC_URL=/ python tools/patch_openapi.py
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def main() -> None:
     spec = json.loads(spec_path.read_text())
 
     # Version
-    version = os.getenv("OPENAPI_VERSION", "1.1.0")
+    version = os.getenv("OPENAPI_VERSION", "1.1.2")
     spec.setdefault("info", {})["version"] = version
 
     # Servers
@@ -92,4 +92,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

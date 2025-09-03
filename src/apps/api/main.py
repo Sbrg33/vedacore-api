@@ -692,8 +692,8 @@ if ACTIVATION_ENABLED:
 
 
 # Root endpoint
-@app.get("/")
-async def root():
+@app.get("/", response_model=RootInfoResponse)
+async def root() -> dict[str, object]:
     """Root endpoint"""
     base_response = {
         "name": "VedaCore Signals API",
@@ -727,9 +727,17 @@ async def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+from pydantic import BaseModel, Field
+
+
+class VersionShortResponse(BaseModel):
+    build_sha: str = Field(..., description="Build commit SHA")
+    symbol_policy: str = Field(..., description="Symbol policy identifier")
+
+
 # Build/version endpoint for deployment verification
-@app.get("/api/v1/version")
-async def version():
+@app.get("/api/v1/version", response_model=VersionShortResponse)
+async def version() -> VersionShortResponse:
     """Expose build metadata (git SHA) and symbol policy"""
     return {
         "build_sha": os.getenv("VC_BUILD_SHA", "unknown"),
@@ -737,9 +745,41 @@ async def version():
     }
 
 
+# Schemas for typed root + systems responses
+class StreamingInfo(BaseModel):
+    sse: str = Field(..., description="SSE endpoint template")
+    websocket: str = Field(..., description="WebSocket endpoint path")
+    authentication: str = Field(..., description="Authentication method for streams")
+
+
+class ActivationInfo(BaseModel):
+    endpoint: str
+    stream: str
+    model_version: str
+    profiles: list[str]
+    description: str
+
+
+class RootInfoResponse(BaseModel):
+    name: str
+    version: str
+    status: str
+    docs: str
+    streaming: StreamingInfo
+    activation: ActivationInfo | None = Field(default=None, description="Activation API info if enabled")
+
+
+class SystemsResponse(BaseModel):
+    systems: list[str]
+    default: str
+    capabilities: dict[str, list[str]]
+    health: dict[str, object]
+    metadata: dict[str, object]
+
+
 # System status endpoint
-@app.get("/api/v1/systems")
-async def get_systems():
+@app.get("/api/v1/systems", response_model=SystemsResponse)
+async def get_systems() -> dict[str, object]:
     """Get registered calculation systems with capabilities"""
     from interfaces.initialize import get_system_status, validate_system_health
 
@@ -799,6 +839,34 @@ def custom_openapi():
     # Surface build SHA
     schema["info"].setdefault("x-build", {})
     schema["info"]["x-build"]["sha"] = os.getenv("VC_BUILD_SHA", "unknown")
+    # Security schemes: add both HTTPBearer (canonical) and bearerAuth (legacy)
+    components = schema.setdefault("components", {})
+    sec = components.setdefault("securitySchemes", {})
+    sec["HTTPBearer"] = {"type": "http", "scheme": "bearer"}
+    sec.setdefault("bearerAuth", {"type": "http", "scheme": "bearer"})
+    schema["security"] = [{"HTTPBearer": []}]
+
+    # Sanitize SSE responses: remove stray application/json alongside text/event-stream
+    paths = schema.get("paths", {})
+    for p, methods in paths.items():
+        if not isinstance(methods, dict):
+            continue
+        for m, op in methods.items():
+            if not isinstance(op, dict):
+                continue
+            responses = op.get("responses", {})
+            r200 = responses.get("200") or responses.get(200)
+            if not isinstance(r200, dict):
+                continue
+            content = r200.get("content", {})
+            if "text/event-stream" in content:
+                # ensure schema for event-stream
+                ces = content["text/event-stream"]
+                if isinstance(ces, dict):
+                    ces.setdefault("schema", {"type": "string"})
+                # drop empty JSON content entry
+                if "application/json" in content:
+                    content.pop("application/json", None)
     app.openapi_schema = schema
     return app.openapi_schema
 

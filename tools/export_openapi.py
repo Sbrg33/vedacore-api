@@ -3,7 +3,7 @@
 Export the live OpenAPI schema from the FastAPI app to ./openapi.json
 
 Usage:
-  PYTHONPATH=./src:. OPENAPI_VERSION=1.1.0 OPENAPI_PUBLIC_URL=https://api.vedacore.io \
+  PYTHONPATH=./src:. OPENAPI_VERSION=1.1.2 OPENAPI_PUBLIC_URL=https://api.vedacore.io \
     python tools/export_openapi.py
 
 Honors environment-based customizations in apps.api.main.custom_openapi.
@@ -36,4 +36,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

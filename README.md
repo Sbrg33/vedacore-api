@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/%40vedacore%2Fapi.svg)](https://www.npmjs.com/package/@vedacore/api)
 [![PyPI](https://img.shields.io/pypi/v/vedacore-api.svg)](https://pypi.org/project/vedacore-api/)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-1.1.0-blue.svg)](./openapi.json)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-1.1.2-blue.svg)](./openapi.json)
 
 [![npm next](https://img.shields.io/npm/v/%40vedacore%2Fapi/next.svg?label=npm%40next)](https://www.npmjs.com/package/@vedacore/api?activeTab=versions)
 [![PyPI pre](https://img.shields.io/pypi/v/vedacore-api.svg?label=pypi%20pre&include_prereleases)](https://pypi.org/project/vedacore-api/#history)

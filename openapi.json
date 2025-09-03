@@ -3,7 +3,7 @@
   "info": {
     "title": "VedaCore Signals API",
     "description": "High-precision KP ephemeris calculations for trading signals",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "contact": {
       "name": "VedaCore Support",
       "email": "support@vedacore.io"
@@ -1607,9 +1607,6 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
-              },
               "text/event-stream": {
                 "schema": {
                   "type": "string"
@@ -2237,9 +2234,6 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
-              },
               "text/event-stream": {
                 "schema": {
                   "type": "string"
@@ -4880,7 +4874,10 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "title": "Response Moon Strength"
+                }
               }
             }
           },
@@ -4968,7 +4965,10 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "title": "Response Moon Config"
+                }
               }
             }
           },
@@ -8508,7 +8508,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ATSStatusResponse"
+                }
               }
             }
           },
@@ -9545,7 +9547,10 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "title": "Response Kprp Explain"
+                }
               }
             }
           },
@@ -9633,7 +9638,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
               }
             }
           },
@@ -9720,9 +9727,6 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
-              },
               "text/event-stream": {
                 "schema": {
                   "type": "string"
@@ -10631,9 +10635,6 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
-              },
               "text/event-stream": {
                 "schema": {
                   "type": "string"
@@ -11240,9 +11241,6 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
-              },
               "text/event-stream": {
                 "schema": {
                   "type": "string"
@@ -11309,7 +11307,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RootInfoResponse"
+                }
               }
             }
           }
@@ -11345,7 +11345,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VersionShortResponse"
+                }
               }
             }
           }
@@ -11362,7 +11364,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SystemsResponse"
+                }
               }
             }
           }
@@ -11372,6 +11376,57 @@
   },
   "components": {
     "schemas": {
+      "StreamingInfo": {
+        "type": "object",
+        "title": "StreamingInfo",
+        "properties": {
+          "sse": {"type": "string", "title": "Sse", "description": "SSE endpoint template"},
+          "websocket": {"type": "string", "title": "Websocket", "description": "WebSocket endpoint path"},
+          "authentication": {"type": "string", "title": "Authentication", "description": "Authentication method for streams"}
+        },
+        "required": ["sse", "websocket", "authentication"]
+      },
+      "ActivationInfo": {
+        "type": "object",
+        "title": "ActivationInfo",
+        "properties": {
+          "endpoint": {"type": "string", "title": "Endpoint"},
+          "stream": {"type": "string", "title": "Stream"},
+          "model_version": {"type": "string", "title": "Model Version"},
+          "profiles": {"type": "array", "title": "Profiles", "items": {"type": "string"}},
+          "description": {"type": "string", "title": "Description"}
+        },
+        "required": ["endpoint", "stream", "model_version", "profiles", "description"]
+      },
+      "RootInfoResponse": {
+        "type": "object",
+        "title": "RootInfoResponse",
+        "properties": {
+          "name": {"type": "string", "title": "Name"},
+          "version": {"type": "string", "title": "Version"},
+          "status": {"type": "string", "title": "Status"},
+          "docs": {"type": "string", "title": "Docs"},
+          "streaming": {"$ref": "#/components/schemas/StreamingInfo"},
+          "activation": {"allOf": [{"$ref": "#/components/schemas/ActivationInfo"}], "nullable": true}
+        },
+        "required": ["name", "version", "status", "docs", "streaming"]
+      },
+      "SystemsResponse": {
+        "type": "object",
+        "title": "SystemsResponse",
+        "properties": {
+          "systems": {"type": "array", "title": "Systems", "items": {"type": "string"}},
+          "default": {"type": "string", "title": "Default"},
+          "capabilities": {
+            "type": "object",
+            "title": "Capabilities",
+            "additionalProperties": {"type": "array", "items": {"type": "string"}}
+          },
+          "health": {"type": "object", "title": "Health", "additionalProperties": {}},
+          "metadata": {"type": "object", "title": "Metadata", "additionalProperties": {}}
+        },
+        "required": ["systems", "default", "capabilities", "health", "metadata"]
+      },
       "ATSBatchRequest": {
         "properties": {
           "start_time": {
@@ -18384,6 +18439,26 @@
         "title": "VersionResponse",
         "description": "Version and environment information."
       },
+      "VersionShortResponse": {
+        "properties": {
+          "build_sha": {
+            "type": "string",
+            "title": "Build Sha",
+            "description": "Build commit SHA"
+          },
+          "symbol_policy": {
+            "type": "string",
+            "title": "Symbol Policy",
+            "description": "Symbol policy identifier"
+          }
+        },
+        "type": "object",
+        "required": [
+          "build_sha",
+          "symbol_policy"
+        ],
+        "title": "VersionShortResponse"
+      },
       "VisibilityRequest": {
         "properties": {
           "timestamp": {
@@ -19420,12 +19495,21 @@
       "HTTPBearer": {
         "type": "http",
         "scheme": "bearer"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   },
   "servers": [
     {
       "url": "https://api.vedacore.io"
+    }
+  ],
+  "security": [
+    {
+      "HTTPBearer": []
     }
   ]
 }
