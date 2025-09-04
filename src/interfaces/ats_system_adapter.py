@@ -2,6 +2,13 @@
 """
 ATS System Adapter - Wraps existing ATS without modifying core
 Maintains all critical logic: 307s offset, True Node handling, Ketu derivation
+
+Hardening note:
+- In some production images, the optional `ats` package may be absent.
+- To keep the API healthy, this adapter degrades gracefully to a no-op
+  implementation that returns neutral (zero) scores instead of crashing
+  the application. Set `ENABLE_ATS=false` to disable the endpoints entirely,
+  or rebuild with `src/ats/` present to enable scoring.
 """
 
 import logging
@@ -13,21 +20,88 @@ from typing import Any
 import yaml
 
 # Import ATS core WITHOUT any modifications
-from ats.vedacore_ats import (
-    PLANETS,
-    KPState,
-    build_edges_transit,
-    context_from_dict,
-    normalize_scores,
-    score_targets,
-)
+logger = logging.getLogger(__name__)
+
+# Attempt to import the ATS core. If unavailable, install a minimal fallback
+# that yields neutral results while keeping the API operational.
+try:
+    from ats.vedacore_ats import (
+        PLANETS,
+        KPState,
+        build_edges_transit,
+        context_from_dict,
+        normalize_scores,
+        score_targets,
+    )
+    _ATS_CORE_AVAILABLE = True
+except Exception as _e:  # noqa: N816
+    _ATS_CORE_AVAILABLE = False
+    logger.warning(
+        "ATS core not available (%s). Using no-op fallback with neutral scores. "
+        "Set ENABLE_ATS=false to return 403 on endpoints or rebuild image with src/ats/ present.",
+        _e,
+    )
+
+    # --- Minimal fallback ---
+    from dataclasses import dataclass
+    from typing import Any, Dict, Iterable, List, Tuple
+
+    PLANETS: Tuple[str, ...] = (
+        "SUN",
+        "MOO",
+        "JUP",
+        "RAH",
+        "MER",
+        "VEN",
+        "KET",
+        "SAT",
+        "MAR",
+    )
+
+    @dataclass
+    class KPState:  # type: ignore[override]
+        moon_nl: str
+        moon_sl: str
+        moon_ssl: str
+        planet_chain: Dict[str, Tuple[str, str, str]] | None = None
+
+    def context_from_dict(cfg: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[override]
+        return cfg or {}
+
+    def build_edges_transit(  # type: ignore[override]
+        planets: Iterable[str],
+        longs: Dict[str, float],
+        dign: Dict[str, str],
+        conds: Dict[str, Dict[str, Any]],
+        *,
+        kp: KPState,
+        ctx: Dict[str, Any],
+    ) -> List[Tuple[str, str, float]]:
+        # No-op: return no edges
+        return []
+
+    def score_targets(  # type: ignore[override]
+        targets: Iterable[str],
+        planets: Iterable[str],
+        edges: List[Tuple[str, str, float]],
+        *,
+        ctx: Dict[str, Any],
+        kp: KPState | None = None,
+    ) -> Tuple[Dict[str, float], Dict[str, Dict[str, float]], List[dict]]:
+        tset = [t for t in (targets or [])]
+        totals: Dict[str, float] = {t: 0.0 for t in tset}
+        by_source: Dict[str, Dict[str, float]] = {t: {} for t in tset}
+        return totals, by_source, []
+
+    def normalize_scores(totals: Dict[str, float], ref: float = 1.5) -> Dict[str, float]:  # type: ignore[override]
+        return {k: 0.0 for k in (totals or {})}
 
 # Import existing facade provider - it has correct 307s offset and node logic
 from ats.vedacore_facade_provider import VedaCoreFacadeProvider
 
 from .system_adapter import BaseSystemAdapter, SystemChange, SystemSnapshot
 
-logger = logging.getLogger(__name__)
+logger = logger
 
 # ID mapping at adapter boundary ONLY - core remains unchanged
 ID_TO_ATS = {

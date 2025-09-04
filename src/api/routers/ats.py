@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field, field_validator
 
-from app.services.ats_service import ATSService
+from typing import Optional
 from config.feature_flags import require_feature
 from api.models.responses import (
     ATSBatchResponse,
@@ -28,8 +28,17 @@ from api.models.responses import (
 # Initialize router following project conventions
 router = APIRouter(prefix="/api/v1/ats", tags=["ats"], responses=DEFAULT_ERROR_RESPONSES)
 
-# Initialize service (singleton)
-service = ATSService()
+# Lazy-initialized service to avoid import errors when ATS core is absent
+_service: Optional[object] = None
+
+def _get_service():
+    global _service
+    if _service is None:
+        # Local import to defer adapter import until actually needed
+        from app.services.ats_service import ATSService  # type: ignore
+
+        _service = ATSService()
+    return _service
 
 # Canonical planet symbol → ID mapping (strict, no aliases)
 _SYMBOL_TO_ID = {
@@ -150,6 +159,7 @@ async def calculate_transit(request: ATSTransitRequest):
     Performance: <10ms cached, <50ms cold
     """
     try:
+        service = _get_service()
         result = service.get_scores(
             timestamp=request.timestamp, targets=request.targets
         )
