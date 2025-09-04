@@ -56,6 +56,6 @@ exec uvicorn apps.api.main:app \
   --port "${APP_PORT}" \
   --workers "${UVICORN_WORKERS}" \
   --timeout-keep-alive 3600 \
-  --timeout-graceful "${UVICORN_GRACEFUL_TIMEOUT}" \
+  --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT}" \
   --proxy-headers \
   --forwarded-allow-ips "*"
