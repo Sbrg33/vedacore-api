@@ -96,7 +96,7 @@ jobs:
           envs: AUTH_JWT_SECRET,CORS_ALLOWED_ORIGINS,GHCR_USERNAME,GHCR_TOKEN,PORT,REDIS_URL
           script: |
             set -euo pipefail
-            IMAGE="${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
+            IMAGE="ghcr.io/sbrg33/vedacore-api:${{ steps.tag.outputs.tag }}"
             INTENDED_SHA="${{ steps.tag.outputs.sha }}"
             # Check required environment variables
             : ${GHCR_USERNAME:?GHCR_USERNAME not set}
