@@ -165,6 +165,28 @@ async def readiness_check() -> ReadinessResponse:
     # Run all dependency checks
     dependency_checks = await _check_core_dependencies()
 
+    # Optional: lightweight ATS probe (non-fatal)
+    try:
+        from config.feature_flags import get_feature_flags
+
+        flags = get_feature_flags()
+        if getattr(flags, "ENABLE_ATS", False):
+            try:
+                # Lazy import to avoid overhead when disabled
+                from app.services.ats_service import ATSService  # type: ignore
+
+                svc = ATSService()
+                # Quick smoke; should return instantly in minimal adapter
+                _ = svc.get_scores()
+                dependency_checks["ats"] = DependencyCheck(status="ok")
+            except Exception as e:  # Do not fail readiness; report warning
+                dependency_checks["ats"] = DependencyCheck(
+                    status="warning", error=f"ATS degraded: {e}"
+                )
+    except Exception:
+        # Feature flags unavailable; ignore ATS probe
+        pass
+
     # Determine overall readiness
     critical_failures = []
     warnings = []

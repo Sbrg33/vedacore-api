@@ -1941,6 +1941,26 @@
                   "type": "string"
                 }
               }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store"
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-referrer"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Authorization, Accept"
+              }
             }
           },
           "401": {

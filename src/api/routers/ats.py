@@ -191,7 +191,8 @@ async def calculate_batch(request: ATSBatchRequest) -> ATSBatchResponse:
         raise HTTPException(status_code=400, detail="End time must be after start time")
 
     try:
-        results = service.get_scores_batch(
+        svc = _get_service()
+        results = svc.get_scores_batch(
             start_time=request.start_time,
             end_time=request.end_time,
             interval_minutes=request.interval_minutes,
@@ -216,7 +217,8 @@ async def get_config() -> ATSConfigResponse:
     Returns context file, default targets, and other metadata.
     """
     try:
-        context = service.get_context()
+        svc = _get_service()
+        context = svc.get_context()
         return ATSConfigResponse(context=context)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -240,7 +242,8 @@ async def validate_scores(
     Checks score ranges, computation time, and other constraints.
     """
     try:
-        result = service.validate_scores(timestamp)
+        svc = _get_service()
+        result = svc.validate_scores(timestamp)
         return ATSValidationResponse(
             valid=result.get("valid", False),
             scores=result.get("scores", {}),
@@ -264,15 +267,17 @@ async def get_status() -> ATSStatusResponse:
 
     Returns health check and basic system information.
     """
+    svc = None
     try:
         # Try a test calculation
-        test_result = service.get_scores()
+        svc = _get_service()
+        test_result = svc.get_scores()
 
         return ATSStatusResponse(
             status="healthy",
-            adapter_version=service.adapter.version,
-            context_file=service.adapter.context_yaml,
-            cache_ttl=service.cache_ttl,
+            adapter_version=svc.adapter.version,
+            context_file=svc.adapter.context_yaml,
+            cache_ttl=svc.cache_ttl,
             test_calculation={
                 "success": True,
                 "compute_ms": test_result.get("compute_ms", 0),
@@ -282,9 +287,9 @@ async def get_status() -> ATSStatusResponse:
     except Exception as e:
         return ATSStatusResponse(
             status="unhealthy",
-            adapter_version=getattr(service.adapter, "version", "unknown"),
-            context_file=getattr(service.adapter, "context_yaml", "unknown"),
-            cache_ttl=getattr(service, "cache_ttl", 0),
+            adapter_version=getattr(getattr(svc, "adapter", object()), "version", "unknown"),
+            context_file=getattr(getattr(svc, "adapter", object()), "context_yaml", "unknown"),
+            cache_ttl=getattr(svc, "cache_ttl", 0) if svc else 0,
             test_calculation={"success": False, "error": str(e)},
             error=str(e),
         )
@@ -323,7 +328,8 @@ async def list_contexts() -> ATSContextsResponse:
                 name = file.replace(".yaml", "")
                 contexts.append({"name": name, "file": file})
 
+    svc = _get_service()
     return ATSContextsResponse(
         contexts=contexts,
-        current=os.path.basename(service.adapter.context_yaml),
+        current=os.path.basename(svc.adapter.context_yaml),
     )

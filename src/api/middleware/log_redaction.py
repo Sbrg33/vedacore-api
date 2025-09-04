@@ -226,3 +226,7 @@ def install_global_log_redaction():
     
     # Log the nginx example for ops team
     logger.info("🔧 For reverse proxy log redaction, see TokenRedactionMiddleware.NGINX_LOG_FORMAT_EXAMPLE")
+
+# Backward-compatible alias expected by apps.api.main
+# Some environments import LogRedactionMiddleware; keep alias to avoid startup failures in production
+LogRedactionMiddleware = TokenRedactionMiddleware

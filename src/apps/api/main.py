@@ -954,6 +954,24 @@ def custom_openapi():
             if p == "/api/v1/stream" and m == "get":
                 try:
                     op.setdefault("security", [{"HTTPBearer": []}, {"queryApiKey": []}])
+                    # Optional: document key response headers for SSE 200 responses
+                    # to improve parity with 3.1 authoring docs and make SDKs aware.
+                    r200_headers = r200.setdefault("headers", {})
+                    r200_headers.setdefault(
+                        "Cache-Control",
+                        {"schema": {"type": "string"}, "description": "no-store"},
+                    )
+                    r200_headers.setdefault(
+                        "Referrer-Policy",
+                        {"schema": {"type": "string"}, "description": "no-referrer"},
+                    )
+                    r200_headers.setdefault(
+                        "Vary",
+                        {
+                            "schema": {"type": "string"},
+                            "description": "Authorization, Accept",
+                        },
+                    )
                 except Exception:
                     pass
     app.openapi_schema = schema
