@@ -1,0 +1,81 @@
+name: "ATS Protection Check"
+
+# Verify ATS fixes remain intact on every push
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/interfaces/ats_system_adapter.py'
+      - 'src/api/routers/ats.py' 
+      - 'src/app/services/ats_service.py'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/interfaces/ats_system_adapter.py'
+      - 'src/api/routers/ats.py'
+      - 'src/app/services/ats_service.py'
+
+jobs:
+  ats-regression-check:
+    runs-on: ubuntu-latest
+    name: "Verify ATS Regression Protection"
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 10  # Need history to check for fix commit
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Run ATS Protection Verification
+      run: ./scripts/verify-ats-protection.sh
+      
+    - name: Test ATS Adapter Import (Fallback Mode)
+      run: |
+        cd src
+        python3 -c "
+        # Test that adapter loads without ats package
+        from interfaces.ats_system_adapter import ATSSystemAdapter
+        adapter = ATSSystemAdapter()
+        print('✅ ATS adapter imports successfully without ats package')
+        "
+    
+    - name: Verify Critical Protections
+      run: |
+        echo "🔍 Checking critical protection patterns..."
+        
+        # Must have try/catch in adapter  
+        if ! grep -q "try:" src/interfaces/ats_system_adapter.py; then
+          echo "❌ Missing try/catch in ATS adapter"
+          exit 1
+        fi
+        
+        # Must have fallback flag
+        if ! grep -q "_ATS_CORE_AVAILABLE = False" src/interfaces/ats_system_adapter.py; then
+          echo "❌ Missing fallback flag in ATS adapter"
+          exit 1
+        fi
+        
+        # Must have lazy import in router
+        if ! grep -q "_get_service()" src/api/routers/ats.py; then
+          echo "❌ Missing lazy import in ATS router"
+          exit 1
+        fi
+        
+        echo "✅ All critical ATS protections verified!"
+
+    - name: Comment on PR (if applicable)
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✅ **ATS Protection Check Passed**\n\nThe ATS regression protections are intact:\n- Try/catch fallback in adapter\n- Lazy imports in router\n- No startup crash risk\n\nCommit 8d0ce56 fixes are preserved.'
+          })
