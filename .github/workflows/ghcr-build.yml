@@ -4,6 +4,13 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
+    paths:
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+      - 'src/**'
+      - 'tools/docker-entrypoint.sh'
+      - 'deploy/**'
   workflow_dispatch: {}
 
 env:
@@ -12,6 +19,9 @@ env:
 jobs:
   build-push:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ghcr-build-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: write  # Required for repository_dispatch
       packages: write

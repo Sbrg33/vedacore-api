@@ -18,6 +18,7 @@ SDK quickstart: see `SDK.md` for TypeScript/Python client usage and versioning a
 
 ## Local Dev Quickstart
 
+- Requires Python 3.11
 - Install: `make install`
 - Run API (reload): `make run` (uvicorn on `http://127.0.0.1:8000`)
 - Tests: `make test` (or `PYTHONPATH=./src:. pytest -v`)
@@ -212,8 +213,8 @@ make check-health BASE=http://127.0.0.1:8000
 
 **Base URL & auth**
 - Default server (prod): `https://api.vedacore.io` (override with `OPENAPI_PUBLIC_URL`).
-- Send `X-API-Key` on every request.
-- For SSE, first call `/api/v1/auth/stream-token`, then connect with `?token=<jwt>` (or `Authorization: Bearer <jwt>` for non‑browser clients).
+- REST: send `Authorization: Bearer <jwt>`.
+- Streaming: obtain short‑lived token via `/api/v1/auth/stream-token`; browsers pass `?token=<jwt>`, non‑browsers may use the header.
 
 **Security caution (SSE tokens)**
 - Query tokens in URLs can leak via Referer or logs. Prefer `Authorization: Bearer` for non‑browsers. Query tokens are short‑lived and may be deprecated in the future.
@@ -292,10 +293,11 @@ Sizing your client buffer:
 }
 ```
 
-- Quick curl (replace lat/lon/time):
+- Quick curl (replace token/lat/lon/time):
 ```bash
+TOKEN='<your_jwt>'
 curl -sS -X POST http://127.0.0.1:8000/api/v1/kp/ruling-planets \
-  -H 'content-type: application/json' \
+  -H 'content-type: application/json' -H "Authorization: Bearer $TOKEN" \
   -d '{
         "datetime": "2025-09-01T14:00:00Z",
         "lat": 40.7128,
@@ -317,6 +319,12 @@ export RP_W_DAY_LORD=2.0 RP_W_ASC_NL=3.0 RP_W_MOON_NL=1.5 \
 
 ## Troubleshooting
 
+- Readiness 503 in production: missing `AUTH_JWT_SECRET`/`AUTH_JWKS_URL` or `CORS_ALLOWED_ORIGINS`.
+- 401 on REST: missing or invalid `Authorization: Bearer <jwt>`; verify `AUTH_AUDIENCE`/`AUTH_ISSUER` when using JWKS.
+- 401 on streaming: request `/api/v1/auth/stream-token` and pass `?token=` (browser) or `Authorization` (non‑browser).
+- Metrics with multiple workers: set writable `PROMETHEUS_MULTIPROC_DIR` (e.g., `/tmp/prometheus`).
+- Port conflicts: free port 80 or change `PORT` mapping in `docker run`.
+- Deploy version mismatch: deploy immutable GHCR tag (long SHA) and verify `/api/v1/health/version`.
 ## ATS Endpoints (Feature-Flagged)
 
 - Feature flag: set `ENABLE_ATS=true` to enable ATS routes (default: true unless overridden). When disabled, endpoints return 403.

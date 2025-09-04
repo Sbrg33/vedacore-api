@@ -1,8 +1,24 @@
 name: Contracts Governance
 
 on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'spec/**'
+      - 'openapi.json'
+      - 'tools/export_openapi.py'
+      - 'src/app/openapi/**'
   pull_request:
     branches: [ main, master ]
+    paths:
+      - 'spec/**'
+      - 'openapi.json'
+      - 'tools/export_openapi.py'
+      - 'src/app/openapi/**'
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   spectral-openapi-lint:

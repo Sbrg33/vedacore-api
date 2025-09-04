@@ -2,6 +2,10 @@ name: build-and-publish-sdks
 on:
   push:
     tags: ["sdk-v*"]
+
+concurrency:
+  group: sdk-publish
+  cancel-in-progress: true
 jobs:
   secrets-check:
     runs-on: ubuntu-latest

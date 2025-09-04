@@ -27,7 +27,7 @@ CI Workflow
 
 Notes
 - SSE endpoints use EventSource/websocket directly; SDKs don’t wrap streams.
-- Auth: send X-API-Key header; streaming uses token flow via /api/v1/auth/stream-token.
+- Auth: REST uses `Authorization: Bearer <jwt>`. For SSE/WS, obtain a short‑lived token via `/api/v1/auth/stream-token` and pass `?token=` in browsers (or the header for non‑browsers).
 
 Channels & policy
 

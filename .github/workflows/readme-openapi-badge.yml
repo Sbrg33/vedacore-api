@@ -2,6 +2,9 @@ name: update-openapi-badge
 on:
   push:
     branches: [main]
+    paths:
+      - 'openapi.json'
+      - 'README.md'
 jobs:
   badge:
     runs-on: ubuntu-latest

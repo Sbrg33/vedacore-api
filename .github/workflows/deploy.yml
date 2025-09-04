@@ -96,6 +96,8 @@ jobs:
           envs: AUTH_JWT_SECRET,CORS_ALLOWED_ORIGINS,GHCR_USERNAME,GHCR_TOKEN,PORT,REDIS_URL,API_KEY_V1_CUTOFF_DATE,AUTH_JWKS_URL,DATABASE_URL,SUPABASE_DATABASE_URL
           script: |
             set -euo pipefail
+            # Helper: sudo if available
+            if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
             IMAGE="ghcr.io/sbrg33/vedacore-api:${{ steps.tag.outputs.tag }}"
             INTENDED_SHA="${{ steps.tag.outputs.sha }}"
             # Check required environment variables
@@ -135,19 +137,21 @@ jobs:
             systemctl stop apache2 || true
             systemctl stop nginx || true
             # Configure Docker log rotation and cleanup (persistent) - Safe approach
-            mkdir -p /etc/docker
-            # Write daemon.json with explicit error checking to prevent corruption
-            DAEMON_CONFIG='{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}'
-            echo "$DAEMON_CONFIG" > /etc/docker/daemon.json.tmp
-            if [ $? -eq 0 ] && echo "$DAEMON_CONFIG" | python3 -m json.tool > /dev/null 2>&1; then
-              mv /etc/docker/daemon.json.tmp /etc/docker/daemon.json
-              echo "✅ Docker daemon.json written successfully"
-              systemctl restart docker || true
+            # Only attempt if we have permissions
+            if [ -w /etc ] || [ -n "$SUDO" ]; then
+              ${SUDO} mkdir -p /etc/docker || true
+              # Write daemon.json with explicit error checking to prevent corruption
+              DAEMON_CONFIG='{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}'
+              if echo "$DAEMON_CONFIG" | python3 -m json.tool > /dev/null 2>&1; then
+                # Use tee with sudo to avoid permission issues
+                echo "$DAEMON_CONFIG" | ${SUDO} tee /etc/docker/daemon.json >/dev/null 2>&1 || true
+                echo "✅ Docker daemon.json ensured (log rotation)"
+                ${SUDO} systemctl restart docker >/dev/null 2>&1 || true
+              else
+                echo "⚠️  WARNING: Skipping daemon.json update (invalid JSON tool or content)"
+              fi
             else
-              echo "❌ ERROR: Failed to write valid daemon.json" >&2
-              rm -f /etc/docker/daemon.json.tmp
-              # Don't fail deployment, but log the issue
-              echo "⚠️  WARNING: Docker daemon.json update failed, using existing config"
+              echo "ℹ️ Skipping Docker daemon.json update (insufficient permissions)"
             fi
             # Pull & restart container directly on port 80 (bypass nginx)
             docker rm -f vedacore-api || true

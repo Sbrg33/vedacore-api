@@ -2,7 +2,11 @@ name: sdk-next
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: '17 5 * * *'
+    - cron: '17 5 * * 0'  # Weekly, Sundays 05:17 UTC
+
+concurrency:
+  group: sdk-next
+  cancel-in-progress: true
 
 jobs:
   secrets-check:

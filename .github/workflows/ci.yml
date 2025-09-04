@@ -3,12 +3,29 @@ name: Minimal CI
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - '**/*.md'
+      - '**/docs/**'
+      - 'CLAUDE.md'
+      - 'SDK.md'
+      - 'DEPLOY_TRIGGER.md'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**/*.md'
+      - '**/docs/**'
+      - 'CLAUDE.md'
+      - 'SDK.md'
+      - 'DEPLOY_TRIGGER.md'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,6 +50,7 @@ jobs:
   docker-smoke:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
