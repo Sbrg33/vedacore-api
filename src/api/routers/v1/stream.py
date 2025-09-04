@@ -7,8 +7,9 @@ Implements PM requirements for secure streaming with token redaction.
 
 from typing import List, Dict, Any, Optional, AsyncIterator
 from datetime import datetime
+import time
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, Header
 from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from fastapi.responses import StreamingResponse
 import jwt
@@ -17,11 +18,13 @@ import asyncio
 
 from .models import BaseResponse, ErrorResponse, PATH_TEMPLATES
 from app.core.environment import get_complete_config
+from api.services.metrics import streaming_metrics
+from api.services.rate_limiter import check_qps_limit
 
 router = APIRouter(prefix="/api/v1", tags=["stream"], responses=DEFAULT_ERROR_RESPONSES) 
 
 
-def verify_stream_token(token: str, expected_topic: Optional[str] = None) -> dict:
+def verify_stream_token(token: str, expected_topic: Optional[str] = None, source: Optional[str] = None) -> dict:
     """
     Verify streaming token with PM security requirements:
     - Audience must be "stream"
@@ -31,7 +34,13 @@ def verify_stream_token(token: str, expected_topic: Optional[str] = None) -> dic
     """
     try:
         config = get_complete_config()
-        payload = jwt.decode(token, config.database.auth_secret, algorithms=["HS256"])
+        # Disable built-in audience verification; enforce manually below
+        payload = jwt.decode(
+            token,
+            config.database.auth_secret,
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
         
         # Verify audience
         if payload.get("aud") != "stream":
@@ -42,6 +51,18 @@ def verify_stream_token(token: str, expected_topic: Optional[str] = None) -> dic
         if expected_topic and token_topic != expected_topic:
             raise jwt.InvalidTokenError(f"Token topic {token_topic} does not match requested {expected_topic}")
         
+        # Enforce short TTL for query tokens (<= 600s)
+        if source == "query":
+            try:
+                iat = float(payload.get("iat"))
+                exp = float(payload.get("exp"))
+                # Allow small clock skew (+/-30s) beyond 10m TTL
+                if exp - iat > 630.0:
+                    raise jwt.InvalidTokenError("Query token TTL exceeds 10 minutes (+30s skew)")
+            except Exception:
+                # If claims missing/malformed, treat as invalid
+                raise jwt.InvalidTokenError("Invalid token claims for TTL enforcement")
+
         # TODO: Implement JTI single-use check
         # jti = payload.get("jti")
         # if await is_jti_already_used(jti):
@@ -51,11 +72,18 @@ def verify_stream_token(token: str, expected_topic: Optional[str] = None) -> dic
         return payload
         
     except jwt.InvalidTokenError as e:
+        # Metrics: auth failure
+        try:
+            streaming_metrics.record_auth_failure("invalid_token", "/api/v1/stream")
+        except Exception:
+            pass
         raise HTTPException(
             status_code=401,
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
             detail=ErrorResponse.create(
                 code="AUTH_ERROR",
-                message=f"Invalid streaming token: {str(e)}"
+                message="Invalid streaming token",
+                details={"error": str(e), "remediation": "Provide Bearer token or short\u2011TTL query token"}
             ).dict()
         )
 
@@ -72,52 +100,49 @@ async def generate_sse_stream(topic: str, tenant_id: str) -> AsyncIterator[str]:
         from api.services.stream_manager import stream_manager
         
         # Subscribe to topic
-        queue = await stream_manager.subscribe(topic, tenant_id)
+        queue = await stream_manager.subscribe(topic)
         
-        sequence = 0
         while True:
             try:
                 # Wait for message with timeout
                 message = await asyncio.wait_for(queue.get(), timeout=30.0)
-                
-                # Format as SSE event envelope
-                envelope = {
-                    "v": 1,
-                    "ts": datetime.utcnow().isoformat() + "Z",
-                    "seq": sequence,
-                    "topic": topic,
-                    "event": "update",
-                    "payload": message
-                }
-                
-                # Send as SSE event
-                sse_data = f"data: {json.dumps(envelope)}\n\n"
-                yield sse_data
-                
-                sequence += 1
+                # message is a JSON string envelope produced by stream_manager.publish
+                try:
+                    obj = json.loads(message)
+                except Exception:
+                    # Fallback: wrap raw message
+                    obj = {
+                        "v": 1,
+                        "ts": datetime.utcnow().isoformat() + "Z",
+                        "seq": 0,
+                        "topic": topic,
+                        "event": "update",
+                        "payload": message,
+                    }
+                # Send as SSE event with id/event
+                eid = str(obj.get("seq", ""))
+                ev = str(obj.get("event", "update"))
+                data = json.dumps(obj)
+                yield f"id: {eid}\nevent: {ev}\ndata: {data}\n\n"
                 
             except asyncio.TimeoutError:
                 # Send heartbeat
                 heartbeat = {
                     "v": 1,
                     "ts": datetime.utcnow().isoformat() + "Z", 
-                    "seq": sequence,
+                    "seq": 0,
                     "topic": topic,
                     "event": "heartbeat",
                     "payload": {}
                 }
-                
-                sse_data = f"data: {json.dumps(heartbeat)}\n\n"
-                yield sse_data
-                
-                sequence += 1
+                yield f"event: heartbeat\ndata: {json.dumps(heartbeat)}\n\n"
                 
     except Exception as e:
         # Send error event
         error_event = {
             "v": 1,
             "ts": datetime.utcnow().isoformat() + "Z",
-            "seq": sequence,
+            "seq": 0,
             "topic": topic, 
             "event": "error",
             "payload": {"message": str(e)}
@@ -127,7 +152,7 @@ async def generate_sse_stream(topic: str, tenant_id: str) -> AsyncIterator[str]:
     finally:
         # Cleanup subscription
         if 'queue' in locals():
-            await stream_manager.unsubscribe(topic, tenant_id, queue)
+            await stream_manager.unsubscribe(topic, queue)
 
 
 @router.get(
@@ -138,7 +163,9 @@ async def generate_sse_stream(topic: str, tenant_id: str) -> AsyncIterator[str]:
 )
 async def stream_events(
     topic: str = Query(..., description="Topic to subscribe to"),
-    token: str = Query(..., description="One-time streaming token")
+    token: Optional[str] = Query(None, description="One-time streaming token (query param; preferred for browsers)"),
+    authorization: Optional[str] = Header(None, description="Optional Authorization: Bearer <token> for non-browser clients"),
+    last_event_id: str | None = Header(None, convert_underscores=False),
 ) -> StreamingResponse:
     """
     Subscribe to Server-Sent Events stream for specified topic.
@@ -146,20 +173,168 @@ async def stream_events(
     Requires one-time streaming token issued via /api/v1/auth/stream-token.
     Token must be topic-scoped and will be consumed on first use.
     """
+    # Normalize auth with header precedence
+    handshake_start = time.perf_counter()
+    bearer_token: Optional[str] = None
+    if authorization:
+        try:
+            scheme, value = authorization.split(" ", 1)
+            if scheme.lower() == "bearer" and value:
+                bearer_token = value.strip()
+        except ValueError:
+            bearer_token = None
+    query_token = token
+    src = "header" if bearer_token else ("query" if query_token else None)
+    resolved_token = bearer_token or query_token
+    if not resolved_token:
+        # Metrics: missing token
+        try:
+            streaming_metrics.record_auth_failure("missing_token", "/api/v1/stream")
+            streaming_metrics.record_sse_handshake("unknown", "missing_token", latency_seconds=round((time.perf_counter()-handshake_start), 6))
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=401,
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+            detail=ErrorResponse.create(
+                code="AUTH_ERROR",
+                message="Missing streaming token (query ?token=... or Authorization: Bearer)",
+                details={"remediation": "Provide Bearer token or short\u2011TTL query token"}
+            ).dict()
+        )
+
     # Verify streaming token
-    payload = verify_stream_token(token, topic)
+    payload = verify_stream_token(resolved_token, topic, source=src)
     tenant_id = payload.get("tid", "unknown")
+    # Capture token expiry (seconds) if available
+    exp_ts = None
+    try:
+        exp_ts = float(payload.get("exp")) if payload and payload.get("exp") is not None else None
+    except Exception:
+        exp_ts = None
+    # Metrics: successful auth and handshake record
+    try:
+        streaming_metrics.record_auth_success(tenant_id, "/api/v1/stream")
+        streaming_metrics.record_sse_handshake(src or "unknown", "success", latency_seconds=round((time.perf_counter()-handshake_start), 6))
+    except Exception:
+        pass
+
+    # Handshake rate limit per tenant
+    try:
+        await check_qps_limit(tenant_id, cost=1.0)
+    except HTTPException as e:
+        try:
+            streaming_metrics.record_sse_handshake(src or "unknown", "rate_limited", latency_seconds=round((time.perf_counter()-handshake_start), 6))
+        except Exception:
+            pass
+        raise
     
-    # Generate SSE stream
+    async def sse_with_resume() -> AsyncIterator[str]:
+        # Emit retry hint once
+        yield "retry: 15000\n\n"
+        # Check resume gap (buffer exhaustion)
+        if last_event_id:
+            try:
+                last_seq = int(str(last_event_id).strip())
+            except ValueError:
+                last_seq = -1
+            try:
+                stats = await stream_manager.resume_stats(topic)  # type: ignore[name-defined]
+                min_candidates = []
+                try:
+                    rmin = stats.get("redis", {}).get("min_seq")
+                    if rmin is not None:
+                        min_candidates.append(int(rmin))
+                except Exception:
+                    pass
+                try:
+                    mmin = stats.get("memory", {}).get("min_seq")
+                    if mmin is not None:
+                        min_candidates.append(int(mmin))
+                except Exception:
+                    pass
+                if min_candidates:
+                    min_seq = min(min_candidates)
+                    if last_seq < (min_seq - 1):
+                        # Signal reset and terminate so client can reconnect cleanly
+                        try:
+                            streaming_metrics.record_sse_reset(topic)
+                        except Exception:
+                            pass
+                        yield "event: reset\ndata: full-resync\n\n"
+                        return
+            except Exception:
+                pass
+        # Replay missed events if Last-Event-ID provided
+        if last_event_id:
+            try:
+                last_seq = int(str(last_event_id).strip())
+            except ValueError:
+                last_seq = -1
+            try:
+                from api.services.stream_manager import stream_manager
+                backlog = await stream_manager.replay_since(topic, last_seq)
+                try:
+                    streaming_metrics.record_sse_resume_replayed(topic, len(backlog))
+                except Exception:
+                    pass
+                for raw in backlog:
+                    try:
+                        obj = json.loads(raw)
+                    except Exception:
+                        continue
+                    eid = str(obj.get("seq", ""))
+                    ev = str(obj.get("event", "update"))
+                    yield f"id: {eid}\nevent: {ev}\ndata: {raw}\n\n"
+            except Exception:
+                pass
+        # Then continue with live stream
+        async for chunk in generate_sse_stream(topic, tenant_id):
+            # Mid-stream token expiry policy (for query tokens): emit error and terminate
+            if src == "query" and exp_ts is not None:
+                try:
+                    if time.time() > exp_ts:
+                        err = {
+                            "v": 1,
+                            "ts": datetime.utcnow().isoformat() + "Z",
+                            "seq": 0,
+                            "topic": topic,
+                            "event": "error",
+                            "payload": {"code": "token_expired", "message": "Streaming token expired"},
+                        }
+                        yield f"event: error\ndata: {json.dumps(err)}\n\n"
+                        return
+                except Exception:
+                    pass
+            # chunk may be data-only; upgrade to include id/event when possible
+            try:
+                obj = json.loads(chunk.replace("data: ", "").strip())
+                eid = str(obj.get("seq", ""))
+                ev = str(obj.get("event", "update"))
+                yield f"id: {eid}\nevent: {ev}\ndata: {json.dumps(obj)}\n\n"
+            except Exception:
+                yield chunk
+
+    # Generate SSE stream with anti-buffer + anti-leak headers
+    headers = {
+        "Cache-Control": "no-store",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Referrer-Policy": "no-referrer",
+        "Vary": "Authorization, Accept",
+    }
+    if src == "query":
+        headers.update({
+            "Warning": '299 vedacore "Query token deprecated; use Authorization header."',
+            "Deprecation": "true",
+            "Sunset": "Wed, 31 Dec 2025 00:00:00 GMT",
+        })
     return StreamingResponse(
-        generate_sse_stream(topic, tenant_id),
+        sse_with_resume(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive", 
-            "X-Accel-Buffering": "no",  # Disable Nginx buffering
-            "Access-Control-Allow-Origin": "*",  # CORS handled by middleware
-        }
+        headers=headers,
     )
 
 
@@ -298,7 +473,7 @@ async def websocket_endpoint(
     summary="List Available Topics",
     operation_id="v1_stream_topics",
 )
-async def list_stream_topics() -> BaseResponse:
+async def list_stream_topics(include_resume: bool = Query(False, description="Include resume stats")) -> BaseResponse:
     """
     Get list of available streaming topics.
     
@@ -330,7 +505,21 @@ async def list_stream_topics() -> BaseResponse:
             "requires_auth": True
         }
     ]
-    
+    # Enrich with current subscribers and optional resume stats
+    try:
+        from api.services.stream_manager import stream_manager
+        stats = stream_manager.stats()
+        subs = stats.get("topics", {})
+        if include_resume:
+            import asyncio
+            async def add_resume(entry):
+                entry["resume"] = await stream_manager.resume_stats(entry["topic"])  # type: ignore
+            await asyncio.gather(*[add_resume(t) for t in topics])
+        for t in topics:
+            t["subscribers"] = subs.get(t["topic"], 0)
+    except Exception:
+        pass
+
     return BaseResponse.create(
         data=topics,
         path_template=PATH_TEMPLATES["stream_topics"],

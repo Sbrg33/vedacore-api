@@ -1,0 +1,131 @@
+name: Contracts Governance
+
+on:
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  spectral-openapi-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint OpenAPI 3.1 with Spectral
+        run: |
+          docker run --rm -v "$PWD:/work" stoplight/spectral:6 \
+            lint /work/spec/openapi-3.1.yaml
+
+  asyncapi-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate AsyncAPI
+        run: |
+          docker run --rm -v "$PWD:/work" ghcr.io/asyncapi/cli:2.8.0 \
+            validate /work/spec/asyncapi.yaml
+
+  spec-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Export OpenAPI JSON from app
+        env:
+          PYTHONPATH: ./src:.
+          OPENAPI_PUBLIC_URL: https://api.vedacore.io
+        run: |
+          python tools/export_openapi.py
+      - name: Fail if openapi.json changed
+        run: |
+          if ! git diff --quiet -- openapi.json; then
+            echo "::error::openapi.json drift detected. Export and commit the spec.";
+            git --no-pager diff -- openapi.json | cat;
+            exit 1;
+          fi
+      - name: Re-export determinism check
+        env:
+          PYTHONPATH: ./src:.
+          OPENAPI_PUBLIC_URL: https://api.vedacore.io
+        run: |
+          python tools/export_openapi.py
+          jq -S . openapi.json > /tmp/export_a.json
+          python tools/export_openapi.py
+          jq -S . openapi.json > /tmp/export_b.json
+          diff -u /tmp/export_a.json /tmp/export_b.json
+      - name: Assert SSE dual security schemes
+        run: |
+          jq -e '
+            .paths["/api/v1/stream"].get.security as $s | 
+            ($s | map(keys[]) | index("HTTPBearer") or ($s | map(keys[]) | index("bearerAuth"))) and 
+            ($s | map(keys[]) | index("queryApiKey")) and 
+            ( ($s | length) >= 2 )
+          ' openapi.json >/dev/null
+      - name: Assert SSE content-type advertised
+        run: |
+          jq -e '.paths["/api/v1/stream"].get.responses["200"].content["text/event-stream"]' openapi.json >/dev/null
+
+  openapi-diff-stable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Get previous main spec
+        run: |
+          git fetch origin +refs/heads/main:refs/remotes/origin/main
+          git show origin/main:openapi.json > prev.json || echo '{}' > prev.json
+      - name: Diff gate (breaking changes)
+        run: |
+          docker run --rm -v "$PWD:/work" tufin/oasdiff:2.8.8 \
+            breaking /work/prev.json /work/openapi.json || true
+          # Note: For strict gating, remove '|| true'.
+      - name: Diff vs 3.1 source (breaking check)
+        run: |
+          docker run --rm -v "$PWD:/work" tufin/oasdiff:2.8.8 \
+            breaking /work/spec/openapi-3.1.yaml /work/openapi.json || true
+          # Note: For strict gating, remove '|| true'.
+
+  swisseph-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Forbid direct swisseph imports outside allowlist
+        run: |
+          if rg -n -U "(^|\s)(from\s+(swisseph|pyswisseph)|import\s+(swisseph|pyswisseph))" src \
+            -g '!src/refactor/**' -g '!src/interfaces/**' -g '!src/api/middleware/ephemeris_headers.py'; then \
+            echo '::error::Direct swisseph imports found outside allowlist'; exit 1; \
+          else echo 'Boundary check: OK'; fi
+
+  schemathesis-fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install schemathesis==3.28.0
+      - name: Launch API
+        env:
+          AUTH_JWT_SECRET: dev-secret-for-ci
+        run: |
+          uvicorn apps.api.main:app --port 8000 &
+          echo $! > api.pid
+          sleep 3
+      - name: Run Schemathesis (smoke)
+        if: always()
+        run: |
+          schemathesis run --workers=2 --max-examples=10 --stateful=links \
+            --checks=all --validate-schema=true http://127.0.0.1:8000/openapi.json || true
+      - name: Stop API
+        if: always()
+        run: |
+          kill $(cat api.pid) || true

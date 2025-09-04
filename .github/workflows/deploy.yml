@@ -133,18 +133,21 @@ jobs:
             # Stop Apache and nginx to ensure port 80 is available
             systemctl stop apache2 || true
             systemctl stop nginx || true
-            # Configure Docker log rotation and cleanup (persistent)
+            # Configure Docker log rotation and cleanup (persistent) - Safe approach
             mkdir -p /etc/docker
-            cat > /etc/docker/daemon.json << 'EOF'
-            {
-              "log-driver": "json-file",
-              "log-opts": {
-                "max-size": "10m",
-                "max-file": "3"
-              }
-            }
-            EOF
-            systemctl restart docker || true
+            # Write daemon.json with explicit error checking to prevent corruption
+            DAEMON_CONFIG='{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}'
+            echo "$DAEMON_CONFIG" > /etc/docker/daemon.json.tmp
+            if [ $? -eq 0 ] && echo "$DAEMON_CONFIG" | python3 -m json.tool > /dev/null 2>&1; then
+              mv /etc/docker/daemon.json.tmp /etc/docker/daemon.json
+              echo "✅ Docker daemon.json written successfully"
+              systemctl restart docker || true
+            else
+              echo "❌ ERROR: Failed to write valid daemon.json" >&2
+              rm -f /etc/docker/daemon.json.tmp
+              # Don't fail deployment, but log the issue
+              echo "⚠️  WARNING: Docker daemon.json update failed, using existing config"
+            fi
             # Pull & restart container directly on port 80 (bypass nginx)
             docker rm -f vedacore-api || true
             docker pull "$IMAGE"

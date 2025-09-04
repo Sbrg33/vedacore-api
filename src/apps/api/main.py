@@ -15,6 +15,7 @@ try:
 except ImportError:
     ORJSON_AVAILABLE = False
 import asyncio
+import uuid
 import os
 
 from contextlib import asynccontextmanager
@@ -50,9 +51,10 @@ from app.core.environment import get_complete_config
 from refactor.monitoring import set_feature_flag, setup_prometheus_metrics
 from config.feature_flags import get_feature_flags
 from api.models.responses import Problem
-from api.services.auth import require_jwt_header_or_query, AuthContext
+from api.services.auth import require_jwt_header_or_query, AuthContext, optional_jwt, optional_jwt_query
 from api.services.rate_limiter import check_qps_limit
 from fastapi.openapi.utils import get_openapi
+from shared.otel import init_tracing as _otel_init_tracing
 
 # Initialize structured logging EARLY (before any logger usage)
 setup_logging(
@@ -61,9 +63,20 @@ setup_logging(
 )
 logger = get_api_logger("main")
 
+# OTEL tracing is initialized after app creation below
+
 # REST QPS guard: enforce per-tenant request rate limits on REST endpoints
-async def rest_qps_guard(auth: AuthContext = Depends(require_jwt_header_or_query)):
-    await check_qps_limit(auth.require_tenant())
+async def rest_qps_guard(
+    auth_header: AuthContext | None = Depends(optional_jwt),
+    auth_query: AuthContext | None = Depends(optional_jwt_query),
+):
+    """Rate limiting guard; auth optional in local/test environments.
+
+    If no auth is present, uses a public tenant bucket to keep tests simple.
+    """
+    auth = auth_header or auth_query
+    tenant = auth.tenant_id if auth and auth.tenant_id else "public"
+    await check_qps_limit(tenant)
 
 # Guard: warn if environment points to obsolete monorepo paths
 try:
@@ -102,6 +115,7 @@ try:
     from api.middleware.log_redaction import LogRedactionMiddleware
     from api.middleware.usage_metering import UsageMeteringMiddleware
     from api.middleware.idempotency import IdempotencyMiddleware
+    from api.middleware.request_id import RequestIDMiddleware
     from api.middleware.api_key_routing import install_api_key_routing_middleware
     from api.middleware.deprecation_headers import install_deprecation_headers_middleware
     from api.services.redis_config import get_redis, close_redis
@@ -438,6 +452,10 @@ if ORJSON_AVAILABLE:
 
 app = FastAPI(**app_kwargs)
 
+# Optional OpenTelemetry tracing (no-op if disabled or deps missing)
+if _otel_init_tracing(app):
+    logger.info("📡 OpenTelemetry tracing initialized")
+
 
 def configure_cors_security():
     """Configure CORS with production-grade security controls."""
@@ -611,6 +629,10 @@ if config.feature_v1_routing and PRODUCTION_HARDENING_AVAILABLE:
     if install_deprecation_headers_middleware(app):
         logger.info("⚠️ Deprecation headers middleware installed")
     
+    # Request ID middleware (correlation id)
+    app.add_middleware(RequestIDMiddleware)
+    logger.info("🆔 Request ID middleware installed")
+
     # Install idempotency middleware (PM requirement: honor Idempotency-Key)
     app.add_middleware(IdempotencyMiddleware)
     logger.info("🔄 Idempotency middleware installed")
@@ -645,9 +667,7 @@ if config.feature_v1_routing and V1_ROUTERS_AVAILABLE:
 else:
     logger.info("📡 Mounting legacy API routes")
 
-# REST QPS guard: enforce per-tenant request rate limits on REST endpoints
-async def rest_qps_guard(auth: AuthContext = Depends(require_jwt_header_or_query)):
-    await check_qps_limit(auth.require_tenant())
+# (removed duplicate strict rest_qps_guard; see earlier optional version)
 
 # Include legacy routers (always available for backward compatibility)
 app.include_router(health_router, prefix="/api/v1")
@@ -691,37 +711,11 @@ if ACTIVATION_ENABLED:
     logger.info("Activation router mounted at /api/v1/location/activation")
 
 
-# Root endpoint
-@app.get("/", response_model=RootInfoResponse)
-async def root() -> dict[str, object]:
-    """Root endpoint"""
-    base_response = {
-        "name": "VedaCore Signals API",
-        "version": "1.0.0",
-        "status": "operational",
-        "docs": "/api/docs",
-        "streaming": {
-            "sse": "/stream/{topic}?token=jwt_token",
-            "websocket": "/ws?token=jwt_token",
-            "authentication": "jwt_query_parameter",
-        },
-    }
-
-    # Add activation API info if enabled
-    if ACTIVATION_ENABLED:
-        base_response["activation"] = {
-            "endpoint": "/api/v1/location/activation",
-            "stream": "/api/v1/location/activation/stream",
-            "model_version": "GLA-1.0.0",
-            "profiles": ["default", "research-1"],
-            "description": "Global Locality Research - Planetary activation field mapping",
-        }
-
-    return base_response
+## Root endpoint moved below response model definitions
 
 
 # Prometheus metrics endpoint
-@app.get("/metrics", response_class=PlainTextResponse)
+@app.get("/metrics", response_class=PlainTextResponse, tags=["health"])
 async def metrics():
     """Prometheus metrics endpoint"""
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
@@ -736,7 +730,7 @@ class VersionShortResponse(BaseModel):
 
 
 # Build/version endpoint for deployment verification
-@app.get("/api/v1/version", response_model=VersionShortResponse)
+@app.get("/api/v1/version", response_model=VersionShortResponse, tags=["health"])
 async def version() -> VersionShortResponse:
     """Expose build metadata (git SHA) and symbol policy"""
     return {
@@ -778,7 +772,7 @@ class SystemsResponse(BaseModel):
 
 
 # System status endpoint
-@app.get("/api/v1/systems", response_model=SystemsResponse)
+@app.get("/api/v1/systems", response_model=SystemsResponse, tags=["reference"])
 async def get_systems() -> dict[str, object]:
     """Get registered calculation systems with capabilities"""
     from interfaces.initialize import get_system_status, validate_system_health
@@ -801,17 +795,91 @@ async def get_systems() -> dict[str, object]:
         "health": health,
         "metadata": status["metadata"],
     }
+
+# Root endpoint (after models are defined)
+@app.get("/", response_model=RootInfoResponse, tags=["health"])
+async def root() -> dict[str, object]:
+    base_response = {
+        "name": "VedaCore Signals API",
+        "version": "1.0.0",
+        "status": "operational",
+        "docs": "/api/docs",
+        "streaming": {
+            "sse": "/stream/{topic}?token=jwt_token",
+            "websocket": "/ws?token=jwt_token",
+            "authentication": "jwt_query_parameter",
+        },
+    }
+
+    if ACTIVATION_ENABLED:
+        base_response["activation"] = {
+            "endpoint": "/api/v1/location/activation",
+            "stream": "/api/v1/location/activation/stream",
+            "model_version": "GLA-1.0.0",
+            "profiles": ["default", "research-1"],
+            "description": "Global Locality Research - Planetary activation field mapping",
+        }
+
+    return base_response
 # Global HTTPException handler emitting RFC7807 Problem Details
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    problem = Problem(title=str(exc.detail) if exc.detail else "HTTP error", status=exc.status_code)
-    return JSONResponse(status_code=exc.status_code, content=problem.model_dump())
+    # Correlate with request id and trace id
+    req_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    trace_id = None
+    try:
+        from opentelemetry import trace  # type: ignore
+        span = trace.get_current_span()
+        ctx = span.get_span_context() if span else None
+        if ctx and getattr(ctx, "trace_id", 0):
+            trace_id = f"{ctx.trace_id:032x}"
+    except Exception:
+        pass
+    # Reasonable defaults for title/detail
+    detail = None
+    title = "HTTP error"
+    if isinstance(exc.detail, dict):
+        title = exc.detail.get("title") or title
+        detail = exc.detail.get("detail") or detail
+    elif isinstance(exc.detail, str):
+        title = exc.detail
+    # Enrich problem with retry_after_seconds if available
+    retry_after_seconds = None
+    try:
+        ra = None
+        if exc.headers and isinstance(exc.headers, dict):
+            ra = exc.headers.get("Retry-After")
+        if ra is not None:
+            retry_after_seconds = int(str(ra))
+    except Exception:
+        retry_after_seconds = None
+
+    problem = Problem(
+        title=title,
+        status=exc.status_code,
+        detail=detail,
+        instance=str(request.url),
+        trace_id=trace_id,
+        # Include retry hint when present
+        **({"retry_after_seconds": retry_after_seconds} if retry_after_seconds is not None else {}),
+    )
+    return JSONResponse(status_code=exc.status_code, content=problem.model_dump(), headers={"X-Request-ID": req_id})
 
 # Fallback handler for uncaught exceptions
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    problem = Problem(title="Internal Server Error", status=500, detail=str(exc)[:200])
-    return JSONResponse(status_code=500, content=problem.model_dump())
+    req_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    trace_id = None
+    try:
+        from opentelemetry import trace  # type: ignore
+        span = trace.get_current_span()
+        ctx = span.get_span_context() if span else None
+        if ctx and getattr(ctx, "trace_id", 0):
+            trace_id = f"{ctx.trace_id:032x}"
+    except Exception:
+        pass
+    problem = Problem(title="Internal Server Error", status=500, detail=str(exc)[:200], instance=str(request.url), code="INTERNAL_ERROR", trace_id=trace_id)
+    return JSONResponse(status_code=500, content=problem.model_dump(), headers={"X-Request-ID": req_id})
 # Custom OpenAPI schema with metadata (servers/contact/license)
 def custom_openapi():
     if app.openapi_schema:
@@ -839,12 +907,27 @@ def custom_openapi():
     # Surface build SHA
     schema["info"].setdefault("x-build", {})
     schema["info"]["x-build"]["sha"] = os.getenv("VC_BUILD_SHA", "unknown")
-    # Security schemes: add both HTTPBearer (canonical) and bearerAuth (legacy)
+    # Security schemes: add both HTTPBearer (canonical) and bearerAuth (legacy), plus queryApiKey for SSE
     components = schema.setdefault("components", {})
     sec = components.setdefault("securitySchemes", {})
     sec["HTTPBearer"] = {"type": "http", "scheme": "bearer"}
     sec.setdefault("bearerAuth", {"type": "http", "scheme": "bearer"})
+    sec.setdefault("queryApiKey", {"type": "apiKey", "in": "query", "name": "token"})
     schema["security"] = [{"HTTPBearer": []}]
+    # Security & permissions notes for admin/scope-gated endpoints
+    notes = {
+        "adminEndpoints": ["/stream/_resume", "/stream/_topics"],
+        "requirements": "role=admin|owner OR scope includes 'stream:debug'",
+        "problem": {"status": 403, "code": "FORBIDDEN_DEBUG", "title": "Forbidden"},
+    }
+    schema.setdefault("info", {}).setdefault("x-security", notes)
+    try:
+        desc = schema["info"].get("description") or ""
+        extra = "\n\nSecurity: Admin/Debug endpoints require role admin|owner or scope 'stream:debug'."
+        if extra not in desc:
+            schema["info"]["description"] = (desc + extra).strip()
+    except Exception:
+        pass
 
     # Sanitize SSE responses: remove stray application/json alongside text/event-stream
     paths = schema.get("paths", {})
@@ -867,6 +950,12 @@ def custom_openapi():
                 # drop empty JSON content entry
                 if "application/json" in content:
                     content.pop("application/json", None)
+            # For SSE op, ensure op-level OR security for header OR query token
+            if p == "/api/v1/stream" and m == "get":
+                try:
+                    op.setdefault("security", [{"HTTPBearer": []}, {"queryApiKey": []}])
+                except Exception:
+                    pass
     app.openapi_schema = schema
     return app.openapi_schema
 

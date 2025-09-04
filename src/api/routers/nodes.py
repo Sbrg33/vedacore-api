@@ -6,6 +6,9 @@ Provides REST API for node events and current state.
 
 import logging
 import time
+import os
+import json
+import hashlib
 
 from datetime import datetime, UTC
 from typing import Any
@@ -24,6 +27,9 @@ from api.models.responses import (
 
 from app.services.cache_service import CacheService
 from app.utils.hash_keys import cache_key_hash
+from shared.normalize import NORMALIZATION_VERSION, EPHEMERIS_DATASET_VERSION
+from shared.otel import get_tracer
+from shared.trace_attrs import set_common_attrs
 from interfaces.kp_nodes_adapter import get_kp_nodes_adapter
 from refactor.nodes_config import get_node_config, initialize_node_config
 from refactor.time_utils import validate_utc_datetime
@@ -35,6 +41,7 @@ router = APIRouter(prefix="/api/v1", tags=["nodes"], responses=DEFAULT_ERROR_RES
 
 # Initialize cache service
 cache_service = CacheService()
+_tracer = get_tracer("nodes")
 
 # Initialize node configuration if not already done
 try:
@@ -124,19 +131,19 @@ class NodeStateResponse(BaseModel):
     meta: dict[str, Any]
 
 
-def generate_cache_key(prefix: str, **kwargs) -> str:
-    """Generate cache key from parameters"""
-    # Sort kwargs for consistent key generation
-    sorted_items = sorted(kwargs.items())
-    key_str = f"{prefix}:" + ":".join(
-        f"{k}={v}" for k, v in sorted_items if v is not None
-    )
-
-    # Hash long keys
-    if len(key_str) > 200:
-        return f"{prefix}:{cache_key_hash(key_str)}"
-
-    return key_str
+def _content_addressed_key(prefix: str, payload: dict) -> str:
+    algo_version = os.getenv("ALGO_VERSION", "1.0.0")
+    api_version = os.getenv("OPENAPI_VERSION", "1.1.2")
+    stamp = {
+        **payload,
+        "normalization_version": NORMALIZATION_VERSION,
+        "ephemeris_dataset_version": EPHEMERIS_DATASET_VERSION,
+        "algo_version": algo_version,
+        "api_version": api_version,
+    }
+    raw = json.dumps(stamp, separators=(",", ":"), sort_keys=True)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"{prefix}:{digest}"
 
 
 @router.post(
@@ -162,21 +169,33 @@ async def get_node_events(request: NodeEventsRequest) -> list[NodeEvent]:
         # Update metrics
         nodes_requests_total.labels(endpoint="events").inc()
 
-        # Generate cache key (cache per day)
-        cache_key = generate_cache_key(
+        cache_key = _content_addressed_key(
             "NODE_EVENTS",
-            start=request.start.date().isoformat(),
-            end=request.end.date().isoformat(),
-            wobbles=request.include_wobbles,
-            diagnostics=request.include_diagnostics,
+            {
+                "start": request.start.date().isoformat(),
+                "end": request.end.date().isoformat(),
+                "wobbles": request.include_wobbles,
+                "diagnostics": request.include_diagnostics,
+            },
         )
 
         # Check cache
-        cached_result = cache_service.get(cache_key)
+        with _tracer.start_as_current_span("nodes.cache.get"):
+            cached_result = cache_service.get(cache_key)
         if cached_result:
             nodes_cache_hits_total.inc()
             cache_hit = True
             events = cached_result
+            with _tracer.start_as_current_span("nodes.cache.hit") as span:
+                set_common_attrs(
+                    span,
+                    cache_status="HIT",
+                    compute_ms=0.0,
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
         else:
             nodes_cache_misses_total.inc()
 
@@ -190,7 +209,18 @@ async def get_node_events(request: NodeEventsRequest) -> list[NodeEvent]:
                 logger.warning("Diagnostics requested but not enabled in config")
 
             # Get events
-            events = adapter.get_events(request.start, request.end)
+            t0 = time.perf_counter()
+            with _tracer.start_as_current_span("nodes.events") as span:
+                events = adapter.get_events(request.start, request.end)
+                set_common_attrs(
+                    span,
+                    cache_status="MISS",
+                    compute_ms=round((time.perf_counter()-t0)*1000, 3),
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
 
             # Filter out wobbles if not requested
             if not request.include_wobbles:
@@ -201,7 +231,8 @@ async def get_node_events(request: NodeEventsRequest) -> list[NodeEvent]:
                 nodes_events_total.labels(type=event.get("type", "unknown")).inc()
 
             # Cache result (TTL: 1 day)
-            cache_service.set(cache_key, events, ttl=86400)
+            with _tracer.start_as_current_span("nodes.cache.set"):
+                cache_service.set(cache_key, events, ttl=86400)
 
         # Add metadata to each event
         compute_time = time.time() - start_time
@@ -255,16 +286,27 @@ async def get_current_node_state(
         else:
             timestamp = validate_utc_datetime(timestamp)
 
-        # Generate cache key (short TTL)
-        cache_key = generate_cache_key(
-            "NODE_NOW", system=system, ts=timestamp.isoformat()[:16]  # Round to minute
+        cache_key = _content_addressed_key(
+            "NODE_NOW",
+            {"system": system, "ts": timestamp.isoformat()[:16]},
         )
 
         # Check cache (very short TTL)
-        cached_result = await cache_service.get(cache_key)
+        with _tracer.start_as_current_span("nodes.cache.get"):
+            cached_result = await cache_service.get(cache_key)
         if cached_result:
             nodes_cache_hits_total.inc()
             state = cached_result
+            with _tracer.start_as_current_span("nodes.cache.hit") as span:
+                set_common_attrs(
+                    span,
+                    cache_status="HIT",
+                    compute_ms=0.0,
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
         else:
             nodes_cache_misses_total.inc()
 
@@ -272,10 +314,22 @@ async def get_current_node_state(
             adapter = get_kp_nodes_adapter()
 
             # Get current state
-            state = adapter.get_current_state(timestamp)
+            t0 = time.perf_counter()
+            with _tracer.start_as_current_span("nodes.now") as span:
+                state = adapter.get_current_state(timestamp)
+                set_common_attrs(
+                    span,
+                    cache_status="MISS",
+                    compute_ms=round((time.perf_counter()-t0)*1000, 3),
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
 
             # Cache result (TTL: 5 seconds)
-            await cache_service.set(cache_key, state, ttl=5)
+            with _tracer.start_as_current_span("nodes.cache.set"):
+                await cache_service.set(cache_key, state, ttl=5)
 
         # Add performance metadata
         compute_time = time.time() - start_time

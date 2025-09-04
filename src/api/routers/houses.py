@@ -4,15 +4,19 @@ from __future__ import annotations
 import time
 
 from datetime import datetime
+import os
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, Field, field_validator
 
 from interfaces.registry import get_system
+from shared.otel import get_tracer
+from shared.trace_attrs import set_common_attrs
+from shared.normalize import NORMALIZATION_VERSION, EPHEMERIS_DATASET_VERSION
 
 # Prometheus metrics for house calculations
 houses_requests_total = Counter(
@@ -44,6 +48,7 @@ houses_errors_total = Counter(
 )
 
 router = APIRouter(tags=["houses"], responses=DEFAULT_ERROR_RESPONSES)
+_tracer = get_tracer("houses")
 
 NY = ZoneInfo("America/New_York")
 UTC = ZoneInfo("UTC")
@@ -111,7 +116,7 @@ class HousesResponse(BaseModel):
     summary="Calculate houses",
     operation_id="houses_calculate",
 )
-async def compute_houses_endpoint(req: HousesRequest):
+async def compute_houses_endpoint(req: HousesRequest, request: Request):
     # Import unified cache service (Redis in production, file in dev)
     from app.services.unified_cache import UnifiedCache
 
@@ -127,9 +132,22 @@ async def compute_houses_endpoint(req: HousesRequest):
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=UTC)
 
-    # Create cache key (round to minute for caching)
-    ts_minute = ts.replace(second=0, microsecond=0)
-    cache_key = f"HOUSES:{req.house_system}:{req.latitude:.4f}:{req.longitude:.4f}:{ts_minute.isoformat()}:{req.topocentric}"
+    # Content-addressed cache key using normalization + version stamps
+    from shared.normalize import normalize_inputs, content_addressed_key
+    api_version = os.getenv("OPENAPI_VERSION", "1.1.2")
+    algo_version = os.getenv("ALGO_VERSION", "1.0.0")
+    normalized = normalize_inputs(
+        timestamp_iso=ts.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        lat=req.latitude,
+        lon=req.longitude,
+        alt_m=None,
+    )
+    cache_key = content_addressed_key(
+        prefix="HOUSES",
+        normalized=normalized,
+        algo_version=algo_version,
+        api_version=api_version,
+    )
 
     # Initialize cache service for KP_HOUSES system
     cache = UnifiedCache(system="KP_HOUSES")
@@ -141,6 +159,21 @@ async def compute_houses_endpoint(req: HousesRequest):
         houses_cache_hits.inc()
         # Add cache hit indicator to meta
         cached["meta"]["cache_hit"] = True
+        try:
+            request.state.cache_status = "HIT"
+        except Exception:
+            pass
+        # Trace cache hit
+        with _tracer.start_as_current_span("houses.cache.hit") as span:
+            set_common_attrs(
+                span,
+                cache_status="HIT",
+                compute_ms=0.0,
+                algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                norm_version=NORMALIZATION_VERSION,
+                eph_version=EPHEMERIS_DATASET_VERSION,
+            )
         return HousesResponse(**cached)
 
     # Record cache miss
@@ -155,13 +188,24 @@ async def compute_houses_endpoint(req: HousesRequest):
         # Time the computation
         start_time = time.perf_counter()
 
-        payload = adapter.snapshot(
-            ts_utc=ts.astimezone(UTC),
-            lat=req.latitude,
-            lon=req.longitude,
-            house_system=req.house_system,
-            topocentric=req.topocentric,
-        )
+        t0 = time.perf_counter()
+        with _tracer.start_as_current_span("houses.compute") as span:
+            payload = adapter.snapshot(
+                ts_utc=ts.astimezone(UTC),
+                lat=req.latitude,
+                lon=req.longitude,
+                house_system=req.house_system,
+                topocentric=req.topocentric,
+            )
+            set_common_attrs(
+                span,
+                cache_status="MISS",
+                compute_ms=round((time.perf_counter()-t0) * 1000, 3),
+                algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                norm_version=NORMALIZATION_VERSION,
+                eph_version=EPHEMERIS_DATASET_VERSION,
+            )
 
         # Record computation time
         compute_time = time.perf_counter() - start_time
@@ -178,6 +222,10 @@ async def compute_houses_endpoint(req: HousesRequest):
         payload["meta"]["cache_hit"] = False
         payload["meta"]["compute_time_ms"] = round(compute_time * 1000, 3)
 
+        try:
+            request.state.cache_status = "MISS"
+        except Exception:
+            pass
     except ValueError as e:
         # Likely polar latitude error
         houses_errors_total.labels(error_type="polar_latitude").inc()

@@ -23,7 +23,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
 from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from sse_starlette.sse import EventSourceResponse
 
@@ -79,6 +79,7 @@ async def stream_topic(
         ..., description="JWT stream token (query param)"
     ),
     auth_context: AuthContext = Depends(require_jwt_query),  # Browser-compatible auth
+    last_event_id: str | None = Header(None, convert_underscores=False),
 ) -> EventSourceResponse:
     """
     SSE endpoint for real-time topic streaming.
@@ -127,6 +128,29 @@ async def stream_topic(
     async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
         """Generate SSE events with proper cleanup."""
         try:
+            # Hint client about retry interval
+            yield {"retry": 15000}
+            # Replay backlog if Last-Event-ID provided
+            if last_event_id:
+                try:
+                    last_seq = int(str(last_event_id).strip())
+                except ValueError:
+                    last_seq = -1
+                try:
+                    backlog = await stream_manager.replay_since(topic, last_seq)
+                    for raw in backlog:
+                        try:
+                            msg_obj = json.loads(raw)
+                        except Exception:
+                            continue
+                        yield {
+                            "id": str(msg_obj.get("seq", "")),
+                            "event": str(msg_obj.get("event", "update")),
+                            "data": raw,
+                        }
+                except Exception:
+                    pass
+
             while True:
                 # Check if client disconnected
                 if await request.is_disconnected():
@@ -139,13 +163,15 @@ async def stream_topic(
                 try:
                     msg_obj = json.loads(data)
                     event_id = str(msg_obj.get("seq", ""))
+                    event_type = str(msg_obj.get("event", "update"))
                 except (json.JSONDecodeError, KeyError):
                     event_id = ""
+                    event_type = "update"
 
                 # Yield SSE event with resumption support
                 yield {
-                    "id": event_id,  # Enables Last-Event-ID resumption
-                    "event": "update",  # SSE event type
+                    "id": event_id,
+                    "event": event_type,
                     "data": data,  # JSON payload as string
                 }
 
@@ -253,6 +279,125 @@ async def stream_stats(
             f"Stats request failed: request_id={request_id} tenant={tenant_id} error={e}"
         )
         raise
+
+
+_RESUME_EXAMPLE = {
+    "topic": "kp.v1.moon.chain",
+    "redis": {"size": 128, "min_seq": 1012, "max_seq": 1140},
+    "memory": {"size": 16},
+    "timestamp": "2025-09-03T12:34:56Z",
+}
+
+@router.get(
+    "/_resume",
+    summary="Resume store stats",
+    description="Requires admin role or 'stream:debug' scope.",
+    operation_id="stream_resumeStats",
+    responses={
+        200: {
+            "description": "Resume stats",
+            "content": {"application/json": {"example": _RESUME_EXAMPLE}},
+        },
+        401: {"model": Problem, "description": "Unauthorized (missing/invalid token)"},
+        403: {"model": Problem, "description": "Forbidden (admin or stream:debug required)"},
+    },
+)
+async def resume_stats(
+    topic: str = Query(..., description="Topic name"),
+    auth_context: AuthContext = Depends(require_jwt_query),
+) -> dict[str, Any]:
+    """Return Redis + memory resume stats for a topic (auth required)."""
+    from ..services.stream_manager import stream_manager
+
+    # Admin or stream:debug scope required
+    role = (auth_context.role or "").lower() if hasattr(auth_context, "role") else ""
+    scopes = (auth_context.scopes or "") if hasattr(auth_context, "scopes") else ""
+    if role not in ("admin", "owner") and "stream:debug" not in scopes.split():
+        # RFC7807 Problem body
+        from fastapi.responses import JSONResponse
+        problem = Problem(
+            type="https://api.vedacore.io/problems/forbidden",
+            title="Forbidden",
+            status=403,
+            detail="Admin role or 'stream:debug' scope required",
+            code="FORBIDDEN_DEBUG",
+        )
+        return JSONResponse(status_code=403, content=problem.model_dump())
+
+    stats = await stream_manager.resume_stats(topic)
+    return {
+        "topic": topic,
+        "redis": stats.get("redis", {}),
+        "memory": stats.get("memory", {}),
+        "timestamp": stream_manager._ts(),
+    }
+
+
+_TOPICS_EXAMPLE = {
+    "topics": [
+        {
+            "topic": "kp.v1.moon.chain",
+            "subscribers": 3,
+            "resume": {"redis": {"size": 128, "min_seq": 2001, "max_seq": 2050}, "memory": {"size": 16}},
+        }
+    ],
+    "published": 1024,
+    "dropped": 0,
+    "timestamp": "2025-09-03T12:34:56Z",
+}
+
+@router.get(
+    "/_topics",
+    summary="List topics with subscribers and resume stats",
+    description="Requires admin role or 'stream:debug' scope.",
+    operation_id="stream_topics_debug",
+    responses={
+        200: {
+            "description": "Topic stats",
+            "content": {"application/json": {"example": _TOPICS_EXAMPLE}},
+        },
+        401: {"model": Problem, "description": "Unauthorized (missing/invalid token)"},
+        403: {"model": Problem, "description": "Forbidden (admin or stream:debug required)"},
+    },
+)
+async def list_topics_debug(
+    auth_context: AuthContext = Depends(require_jwt_query),
+    include_resume: bool = Query(True, description="Include resume stats"),
+) -> dict[str, Any]:
+    """Debug endpoint listing current topics with subscriber counts.
+
+    Requires a JWT in query param. If include_resume=true, adds Redis/memory
+    resume stats per topic (can be slower on large sets).
+    """
+    from ..services.stream_manager import stream_manager
+
+    # Admin or stream:debug scope required
+    role = (auth_context.role or "").lower() if hasattr(auth_context, "role") else ""
+    scopes = (auth_context.scopes or "") if hasattr(auth_context, "scopes") else ""
+    if role not in ("admin", "owner") and "stream:debug" not in scopes.split():
+        from fastapi.responses import JSONResponse
+        problem = Problem(
+            type="https://api.vedacore.io/problems/forbidden",
+            title="Forbidden",
+            status=403,
+            detail="Admin role or 'stream:debug' scope required",
+            code="FORBIDDEN_DEBUG",
+        )
+        return JSONResponse(status_code=403, content=problem.model_dump())
+
+    stats = stream_manager.stats()
+    topics = []
+    for topic, subs in stats.get("topics", {}).items():
+        entry = {"topic": topic, "subscribers": subs}
+        if include_resume:
+            entry["resume"] = await stream_manager.resume_stats(topic)
+        topics.append(entry)
+    return {
+        "topics": topics,
+        "published": stats.get("published", 0),
+        "dropped": stats.get("dropped", 0),
+        "timestamp": stream_manager._ts(),
+    }
 
 
 @router.post(

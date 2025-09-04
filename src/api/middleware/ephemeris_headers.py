@@ -60,12 +60,14 @@ class EphemerisHeadersMiddleware(BaseHTTPMiddleware):
     
     def _build_static_headers(self) -> dict[str, str]:
         """Build static headers that are the same for all responses."""
+        algo_version = os.getenv("ALGO_VERSION", "1.0.0")
         return {
             "X-Ephemeris-Build": self.ephemeris_build,
             "X-Ayanamsha": "kp",  # Default ayanamsha (may be overridden per request)
             "X-Node-Mode": "true_node",  # Default node mode  
             "X-Zodiac": "sidereal",  # Enforced zodiac system
-            "X-House-System": "placidus"  # Default house system
+            "X-House-System": "placidus",  # Default house system
+            "X-Algorithm-Version": algo_version,
         }
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -80,7 +82,7 @@ class EphemerisHeadersMiddleware(BaseHTTPMiddleware):
         
         # Add dynamic headers based on request
         self._add_dynamic_headers(request, response)
-        
+
         return response
     
     def _add_dynamic_headers(self, request: Request, response: Response):
@@ -100,6 +102,13 @@ class EphemerisHeadersMiddleware(BaseHTTPMiddleware):
             
         if hasattr(request.state, 'cache_status'):
             response.headers["X-Cache-Status"] = request.state.cache_status
+            try:
+                # boolean-friendly indicator
+                response.headers["computed_from_cache"] = (
+                    "true" if str(request.state.cache_status).upper() == "HIT" else "false"
+                )
+            except Exception:
+                response.headers["computed_from_cache"] = "false"
 
 
 def get_ephemeris_info() -> dict[str, str]:

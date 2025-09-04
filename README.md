@@ -14,6 +14,8 @@ Production-ready FastAPI service for high-precision KP astrology calculations.
 - Notes: Ephemeris data under `./swisseph/ephe`; atlas data under `src/data/atlas`
 - CI: Minimal workflow runs pytest smoke with `PYTHONPATH=./src:.`
 
+SDK quickstart: see `SDK.md` for TypeScript/Python client usage and versioning aligned with `openapi.json`.
+
 ## Local Dev Quickstart
 
 - Install: `make install`
@@ -74,7 +76,7 @@ Auth options:
 - HS256: set `AUTH_JWT_SECRET` (min 32 chars)
 
 All REST endpoints require authentication. Use `Authorization: Bearer <jwt>` for REST.
-For SSE/WS, use `?token=<jwt>` as query parameter (browser-compatible).
+For SSE/WS, use `?token=<jwt>` as query parameter (browser-compatible). Non-browser clients may send `Authorization: Bearer <jwt>` instead.
 
 CORS rules:
 - In production, origins must be explicit and include protocol; startup fails on misconfig.
@@ -147,6 +149,13 @@ Notes:
 - Multi-worker metrics use `PROMETHEUS_MULTIPROC_DIR` (default `/tmp/prometheus`).
 - Internal metrics helpers are wired via `refactor.monitoring`.
 
+Streaming metrics of interest:
+- `vc_sse_handshake_total{method, outcome}`: header/query mix and outcomes (success, invalid_token, missing_token, rate_limited).
+- `vc_sse_handshake_latency_seconds{method, outcome}`: handshake latency distribution.
+- `vc_sse_reset_total{topic}`: resets due to resume gaps.
+- `vc_sse_resume_replayed_total{topic}`: events replayed during resume.
+- `vc_stream_connections{tenant,topic,protocol}` and `vc_messages_per_connection{tenant,topic,protocol}`: live connections and throughput.
+
 Quick checks:
 ```bash
 # Health (preferred for monitors)
@@ -177,15 +186,62 @@ make check-health BASE=http://127.0.0.1:8000
 - Patch/minor releases are blocked by an OpenAPI breaking‑change guard.
 - Major versions allow breaking changes.
 
+**Spec source of truth**
+- Authoritative contracts live under `spec/` (`openapi-3.1.yaml`, `asyncapi.yaml`, `VERSIONS.md`).
+- Export the 3.0.x JSON used by SDKs from the running app:
+  - `PYTHONPATH=./src:. python tools/export_openapi.py`
+  - CI validates `spec/` via Spectral + AsyncAPI and diffs `openapi.json`.
+
 **Base URL & auth**
 - Default server (prod): `https://api.vedacore.io` (override with `OPENAPI_PUBLIC_URL`).
 - Send `X-API-Key` on every request.
-- For SSE, first call `/api/v1/auth/stream-token`, then connect with `?token=<jwt>`.
+- For SSE, first call `/api/v1/auth/stream-token`, then connect with `?token=<jwt>` (or `Authorization: Bearer <jwt>` for non‑browser clients).
+
+**Security caution (SSE tokens)**
+- Query tokens in URLs can leak via Referer or logs. Prefer `Authorization: Bearer` for non‑browsers. Query tokens are short‑lived and may be deprecated in the future.
+- Examples:
+  - curl (header): `curl -H "Accept: text/event-stream" -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/stream?topic=kp.moon.chain"`
+  - EventSource (browser): `new EventSource(`${BASE}/api/v1/stream?topic=kp.moon.chain&token=${token}`);`
+  - Also set `Referrer-Policy: no-referrer` on the hosting page to avoid leaking query tokens in Referer headers on navigation.
+
+Add this to static HTML pages:
+```
+<meta name="referrer" content="no-referrer">
+```
+
+Minimal EventSource client handling reset events:
+```
+const url = `${BASE}/api/v1/stream?topic=${encodeURIComponent(topic)}&token=${token}`;
+const es = new EventSource(url);
+es.addEventListener('reset', () => {
+  console.warn('Server requested full resync; reconnecting');
+  es.close();
+  const es2 = new EventSource(`${BASE}/api/v1/stream?topic=${encodeURIComponent(topic)}&token=${token}`);
+});
+```
+
+Resume buffer: server retains a bounded window in memory and/or Redis. If your Last-Event-ID falls behind the minimum retained sequence, the server emits `event: reset` and closes; reconnect without Last-Event-ID.
+
+Browser security headers:
+- Add `Content-Security-Policy: connect-src https://api.vedacore.io;` so browsers can open EventSource to the API origin.
+
+Sizing your client buffer:
+- Debug endpoints expose resume windows:
+  - `/stream/_resume?topic=...` → `redis: {size,min_seq,max_seq}`, `memory: {size,min_seq,max_seq}`
+  - `/stream/_topics?include_resume=true` lists resume stats per topic
+- Choose a local buffer (number of events) that exceeds your expected offline duration multiplied by average event rate.
 
 ## Testing
 
 - Run: `make test` or `PYTHONPATH=./src:. pytest -v`
 - Minimal suite validates docs, readiness, and metrics.
+
+## Contracts Governance
+
+- Source of truth: `spec/openapi-3.1.yaml` and `spec/asyncapi.yaml`.
+- Export live JSON: `PYTHONPATH=./src:. python tools/export_openapi.py`.
+- CI gates: Spectral (OpenAPI), AsyncAPI validate, oasdiff (vs previous and vs 3.1), Schemathesis smoke, drift guard.
+- Pre-commit guard: blocks new direct `swisseph/pyswisseph` imports outside approved modules. Enable via `pip install pre-commit && pre-commit install`.
 
 ## Tools
 
@@ -317,3 +373,25 @@ Defaults are provided in `config/ats/ats_market.yaml` with conservative KP empha
 ## Runbooks
 
 - Extended deployment/runbook docs live in the monorepo: `Sbrg33/vedacore` under `vedacore/docs/feedback/8302025/`.
+
+## Redis/Upstash for Streaming Resume
+
+- Enable Redis-backed SSE resume for multi-worker deployments (Upstash compatible):
+  - `REDIS_URL=rediss://<UPSTASH_USER>:<UPSTASH_PASS>@<host>:<port>`
+  - Optional tuning:
+    - `STREAM_RESUME_BACKEND=redis` (auto-enabled when `REDIS_URL` set)
+    - `STREAM_RESUME_TTL_SECONDS=3600`
+    - `STREAM_RESUME_MAX_ITEMS=5000`
+    - `STREAM_RESUME_REDIS_PREFIX=sse:resume:`
+    - `STREAM_SEQ_REDIS_PREFIX=sse:seq:`
+  - Behavior: each published event is stored in a sorted set per topic; reconnects with `Last-Event-ID` fetch missed events via `ZRANGEBYSCORE`. Global event ids use per-topic `INCR` ensuring monotonic ordering across workers.
+
+## Security Notes (Admin/Debug Endpoints)
+
+- The following internal/debug endpoints require either an admin role or the `stream:debug` scope:
+  - `GET /stream/_resume?topic=...` — returns Redis + memory resume stats for a topic
+  - `GET /stream/_topics?include_resume=true` — returns topics with subscriber counts and optional resume stats
+- Access control:
+  - Role claim (preferred): `role` in JWT must be `admin` or `owner`
+  - Scope claim (alternative): `scope` must include `stream:debug`
+- Failures return RFC 7807 Problem JSON with status 403 and code `FORBIDDEN_DEBUG`.

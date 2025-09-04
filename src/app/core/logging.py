@@ -15,6 +15,27 @@ from typing import Any
 class JsonFormatter(logging.Formatter):
     """JSON formatter for structured logging output"""
 
+    def _redact(self, text: str) -> str:
+        """Redact sensitive markers like token query params and auth headers.
+
+        - token=... in query strings
+        - Authorization: Bearer ... values
+        - Strip query on /api/v1/stream URLs
+        """
+        try:
+            import re
+            # Redact token=... (case-insensitive)
+            text = re.sub(r"(?i)(token=)[^&\s\"]+", r"\1[REDACTED]", text)
+            # Redact Authorization header values
+            text = re.sub(r"(?i)(authorization:\s*bearer\s+)[^\s\"]+", r"\1[REDACTED]", text)
+            # Drop query string for /api/v1/stream URLs
+            text = re.sub(r"(/api/v1/stream[^\s\"]*)\?[^\s\"]*", r"\1", text)
+            # Redact Referer header entirely to avoid token echo
+            text = re.sub(r"(?i)(^|\n)referer:\s*[^\n]+", r"\1Referer: [REDACTED]", text)
+        except Exception:
+            pass
+        return text
+
     def format(self, record: logging.LogRecord) -> str:
         """
         Format log record as JSON
@@ -29,7 +50,7 @@ class JsonFormatter(logging.Formatter):
             "timestamp": self.formatTime(record),
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": self._redact(record.getMessage()),
             "module": record.module,
             "function": record.funcName,
             "line": record.lineno,

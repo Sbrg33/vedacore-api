@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+import os
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -76,6 +77,18 @@ class StreamManager:
             "dropped": 0,
             "subscribers": 0,
         }
+        # In-memory ring buffer per topic for SSE resume
+        self._ring: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=1000))
+        self._ring_size = 1000
+        # Optional Redis-backed resume store (Upstash-compatible)
+        self._resume_store = None
+        self._resume_init_attempted = False
+        try:
+            from shared.otel import get_tracer  # lazy-safe
+
+            self._tracer = get_tracer("stream")
+        except Exception:
+            self._tracer = None
 
     # -------------------- Envelope helpers --------------------
 
@@ -107,9 +120,34 @@ class StreamManager:
     ) -> None:
         """Publish a payload to all subscribers of a topic."""
         publish_start = time.time()
-        env = self.build_envelope(topic=topic, event=event, payload=payload, v=v)
-        data = _dumps(env)
-        await self._broadcast(topic, data)
+        with (self._tracer.start_as_current_span("stream.publish") if self._tracer else _null_cm()) as span:
+            # Global monotonic sequence (Upstash/Redis) with in-process fallback
+            seq = await self._next_global_seq(topic)
+            env = {
+                "v": v,
+                "ts": self._ts(),
+                "seq": seq,
+                "topic": topic,
+                "event": event,
+                "payload": payload,
+            }
+            data = _dumps(env)
+            try:
+                span.set_attribute("stream.topic", topic)
+                span.set_attribute("stream.seq", int(seq))
+            except Exception:
+                pass
+            # Store to ring buffer for resume
+            try:
+                self._store_ring(topic, data)
+            except Exception:
+                pass
+            # Also store to Redis resume backend if available
+            try:
+                await self._maybe_store_resume(topic, int(env.get("seq", 0)), data)
+            except Exception:
+                pass
+            await self._broadcast(topic, data)
 
         # Record metrics
         if METRICS_AVAILABLE:
@@ -228,6 +266,141 @@ class StreamManager:
         if METRICS_AVAILABLE and dropped > 0:
             for _ in range(dropped):
                 streaming_metrics.record_message_dropped(topic, "backpressure")
+
+    # -------------------- Ring buffer -------------------------
+
+    def _store_ring(self, topic: str, data: str) -> None:
+        self._ring[topic].append(data)
+
+    async def replay_since(self, topic: str, last_seq: int, limit: int = 500) -> list[str]:
+        """Return messages with seq > last_seq from Redis if available, else memory ring."""
+        with (self._tracer.start_as_current_span("stream.replay") if self._tracer else _null_cm()) as span:
+            # Try Redis resume store first
+            try:
+                store = await self._get_resume_store()
+                if store is not None:
+                    t0 = time.time()
+                    items = await store.replay_since(topic, last_seq, limit)
+                    try:
+                        span.set_attribute("stream.topic", topic)
+                        span.set_attribute("stream.resume.since", int(last_seq))
+                        span.set_attribute("redis.duration_ms", round((time.time()-t0)*1000, 3))
+                        span.set_attribute("stream.resume.replayed_count", len(items or []))
+                    except Exception:
+                        pass
+                    if items:
+                        return items
+            except Exception:
+                pass
+            # Fallback to memory ring
+            out: list[str] = []
+            try:
+                ring = list(self._ring.get(topic, ()))
+                for s in ring:
+                    try:
+                        obj = _orjson.loads(s) if '_orjson' in globals() else _json.loads(s)
+                    except Exception:
+                        continue
+                    if int(obj.get("seq", -1)) > last_seq:
+                        out.append(s)
+                        if len(out) >= limit:
+                            break
+            except Exception:
+                return out
+            try:
+                span.set_attribute("stream.topic", topic)
+                span.set_attribute("stream.resume.since", int(last_seq))
+                span.set_attribute("stream.resume.replayed_count", len(out))
+            except Exception:
+                pass
+            return out
+
+    async def _maybe_store_resume(self, topic: str, seq: int, data: str) -> None:
+        try:
+            store = await self._get_resume_store()
+            if store is not None:
+                await store.store(topic, seq, data)
+        except Exception:
+            pass
+
+    async def _get_resume_store(self):
+        if self._resume_store is not None or self._resume_init_attempted:
+            return self._resume_store
+        self._resume_init_attempted = True
+        try:
+            from .stream_resume import get_resume_store
+            self._resume_store = await get_resume_store()
+        except Exception:
+            self._resume_store = None
+        return self._resume_store
+
+    async def resume_stats(self, topic: str) -> dict:
+        """Get resume stats for a topic from Redis and memory.
+
+        Returns keys: redis.size, redis.min_seq, redis.max_seq, memory.size, memory.min_seq, memory.max_seq
+        """
+        redis_stats = {"size": 0, "min_seq": None, "max_seq": None}
+        try:
+            store = await self._get_resume_store()
+            if store is not None and hasattr(store, "stats"):
+                redis_stats = await store.stats(topic)  # type: ignore
+        except Exception:
+            pass
+        mem_size = 0
+        mem_min = None
+        mem_max = None
+        try:
+            ring = self._ring.get(topic, ())
+            mem_size = len(ring)
+            if mem_size:
+                try:
+                    import json as _json
+                    first = _json.loads(ring[0])
+                    last = _json.loads(ring[-1])
+                    mem_min = int(first.get("seq", 0))
+                    mem_max = int(last.get("seq", 0))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return {"redis": redis_stats, "memory": {"size": mem_size, "min_seq": mem_min, "max_seq": mem_max}}
+
+    async def _next_global_seq(self, topic: str) -> int:
+        """Return next sequence id from Redis if available; else local counter.
+
+        Uses a per-topic INCR key; compatible with Upstash. No CONFIG required.
+        """
+        try:
+            store = await self._get_resume_store()
+            if store is not None and hasattr(store, "client"):
+                prefix = os.getenv(
+                    "STREAM_SEQ_REDIS_PREFIX",
+                    f"sse:seq:{os.getenv('VC_ENV','local')}:",
+                )
+                key = f"{prefix}{topic}"
+                if self._tracer:
+                    t0 = time.time()
+                    with self._tracer.start_as_current_span("stream.seq.next") as span:
+                        val = await store.client.incr(key)  # type: ignore
+                        try:
+                            span.set_attribute("redis.key", key)
+                            span.set_attribute("redis.duration_ms", round((time.time()-t0)*1000, 3))
+                        except Exception:
+                            pass
+                else:
+                    val = await store.client.incr(key)  # type: ignore
+                return int(val)
+        except Exception:
+            pass
+        return self._next_seq()
+
+# local no-op context manager for tracing
+from contextlib import contextmanager
+
+
+@contextmanager
+def _null_cm():
+    yield None
 
 
 # Singleton instance to import across routers/managers

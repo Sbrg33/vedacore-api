@@ -1,0 +1,165 @@
+openapi: 3.1.0
+$schema: https://spec.openapis.org/oas/3.1/schema/2022-10-07
+info:
+  title: VedaCore Signals API
+  version: "1.1.2"
+  description: >-
+    Authoritative OpenAPI 3.1 specification for the VedaCore Signals API.
+    This file is the single source of truth for the REST API surface.
+    The 3.0.x JSON at repository root is generated for SDKs.
+  contact:
+    name: VedaCore Support
+    email: support@vedacore.io
+  license:
+    name: Proprietary
+    url: https://vedacore.io/license
+  x-security:
+    adminEndpoints:
+      - /stream/_resume
+      - /stream/_topics
+    requirements: "role=admin|owner OR scope includes 'stream:debug'"
+    problem:
+      status: 403
+      code: FORBIDDEN_DEBUG
+      title: Forbidden
+servers:
+  - url: https://api.vedacore.io
+security:
+  - HTTPBearer: []
+components:
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+    queryApiKey:
+      type: apiKey
+      in: query
+      name: token
+paths:
+  /api/v1/health/up:
+    get:
+      summary: Plaintext liveness probe
+      operationId: health_up
+      responses:
+        '200':
+          description: Service is up
+          content:
+            text/plain: {}
+  /api/v1/stream:
+    get:
+      summary: Server-Sent Events stream
+      description: >-
+        Canonical SSE endpoint. For browsers, use query param JWT (`token`) for auth.
+        For non-browser clients, you may also send `Authorization: Bearer <token>`.
+        If both are provided, the Authorization header takes precedence.
+        Tokens are short‑lived and topic‑scoped; do not reuse general bearer tokens.
+        Supports Last-Event-ID resume and sends event id and periodic heartbeat events.
+        See AsyncAPI for full streaming semantics.
+      operationId: v1_stream_sse
+      security:
+        - HTTPBearer: []
+        - queryApiKey: []
+      parameters:
+        - name: topic
+          in: query
+          required: true
+          schema: { type: string }
+        - name: token
+          in: query
+          required: false
+          schema: { type: string }
+          description: One-time streaming token (required for browsers)
+        - name: Authorization
+          in: header
+          required: false
+          schema: { type: string }
+          description: 'Optional Authorization: Bearer <token> for non-browser clients'
+      responses:
+        '200':
+          description: text/event-stream
+          headers:
+            X-Accel-Buffering:
+              description: Nginx anti-buffer header
+              schema: { type: string }
+            Cache-Control:
+              description: No-store for SSE
+              schema: { type: string }
+            Referrer-Policy:
+              description: no-referrer to mitigate token leaks
+              schema: { type: string }
+            Vary:
+              description: Authorization, Accept
+              schema: { type: string }
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+          headers:
+            WWW-Authenticate:
+              schema: { type: string }
+        '403': { description: Forbidden }
+        '429':
+          description: Too Many Requests
+          headers:
+            Retry-After:
+              description: Seconds to wait before retry
+              schema: { type: string }
+  /api/v1/stream/topics:
+    get:
+      summary: List SSE topics (public view)
+      tags: [ stream ]
+      operationId: v1_stream_topics
+      parameters:
+        - name: include_resume
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Include resume stats (may be slow)
+      responses:
+        '200':
+          description: Topic list
+          content:
+            application/json: {}
+        '401': { description: Unauthorized }
+        '429': { description: Too Many Requests }
+  /stream/_resume:
+    get:
+      summary: Resume store stats (admin)
+      tags: [ stream ]
+      description: Requires admin role or 'stream:debug' scope.
+      operationId: stream_resume_stats
+      parameters:
+        - name: topic
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: {} } }
+        '401': { description: Unauthorized }
+        '403': { description: Forbidden }
+  /stream/_topics:
+    get:
+      summary: Topics with subscribers (admin)
+      tags: [ stream ]
+      description: Requires admin role or 'stream:debug' scope.
+      operationId: stream_topics_admin
+      parameters:
+        - name: include_resume
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+      responses:
+        '200': { description: OK, content: { application/json: {} } }
+        '401': { description: Unauthorized }
+        '403': { description: Forbidden }
+  /api/v1/kp/analysis:
+    post:
+      summary: KP Analysis (placeholder)
+      tags: [ kp ]
+      operationId: v1_kp_analysis
+      responses:
+        '200': { description: OK, content: { application/json: {} } }
+        '401': { description: Unauthorized }
+        '429': { description: Too Many Requests }

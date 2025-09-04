@@ -38,10 +38,32 @@ def patch_sse_operation(op: dict) -> None:
         params.append({
             "name": "token",
             "in": "query",
-            "required": True,
+            "required": False,
             "schema": {"type": "string"},
-            "description": "JWT stream token (query param)"
+            "description": "One-time streaming token (query param; preferred for browsers)"
         })
+    # Optionally accept Authorization header for non-browser clients
+    has_auth = any((p.get("name") == "Authorization" and p.get("in") == "header") for p in params)
+    if not has_auth:
+        params.append({
+            "name": "Authorization",
+            "in": "header",
+            "required": False,
+            "schema": {"type": "string"},
+            "description": "Optional Authorization: Bearer <token> for non-browser clients",
+        })
+    # Ensure op-level security allows either bearer or query apiKey
+    op["security"] = [{"bearerAuth": []}, {"queryApiKey": []}]
+
+
+def ensure_path(spec: dict, path: str, method: str, op_obj: dict) -> None:
+    paths = spec.setdefault("paths", {})
+    existing = paths.get(path, {})
+    if method in existing:
+        return
+    # Merge with any existing path item
+    existing[method] = op_obj
+    paths[path] = existing
 
 
 def main() -> None:
@@ -67,6 +89,11 @@ def main() -> None:
         "scheme": "bearer",
         "bearerFormat": "JWT"
     }
+    sec_schemes["queryApiKey"] = {
+        "type": "apiKey",
+        "in": "query",
+        "name": "token",
+    }
     # Apply global security (does not affect SSE token-based but OK)
     spec["security"] = [{"bearerAuth": []}]
 
@@ -85,6 +112,73 @@ def main() -> None:
             op = paths[path][method]
             if isinstance(op, dict):
                 patch_sse_operation(op)
+
+    # Ensure admin/debug streaming endpoints exist (minimal docs)
+    ensure_path(
+        spec,
+        "/stream/_resume",
+        "get",
+        {
+            "tags": ["stream"],
+            "summary": "Resume store stats",
+            "description": "Requires admin role or 'stream:debug' scope.",
+            "parameters": [
+                {
+                    "name": "topic",
+                    "in": "query",
+                    "required": True,
+                    "schema": {"type": "string"},
+                    "description": "Topic name",
+                }
+            ],
+            "responses": {
+                "200": {"description": "OK", "content": {"application/json": {}}},
+                "401": {"description": "Unauthorized"},
+                "403": {"description": "Forbidden"},
+            },
+        },
+    )
+
+    ensure_path(
+        spec,
+        "/stream/_topics",
+        "get",
+        {
+            "tags": ["stream"],
+            "summary": "List topics with subscribers and resume stats",
+            "description": "Requires admin role or 'stream:debug' scope.",
+            "parameters": [
+                {
+                    "name": "include_resume",
+                    "in": "query",
+                    "required": False,
+                    "schema": {"type": "boolean", "default": True},
+                    "description": "Include resume stats",
+                }
+            ],
+            "responses": {
+                "200": {"description": "OK", "content": {"application/json": {}}},
+                "401": {"description": "Unauthorized"},
+                "403": {"description": "Forbidden"},
+            },
+        },
+    )
+
+    # Ensure KP analysis placeholder exists in spec (align with code)
+    ensure_path(
+        spec,
+        "/api/v1/kp/analysis",
+        "post",
+        {
+            "tags": ["kp"],
+            "summary": "KP Analysis",
+            "responses": {
+                "200": {"description": "OK", "content": {"application/json": {}}},
+                "401": {"description": "Unauthorized"},
+                "429": {"description": "Too Many Requests"},
+            },
+        },
+    )
 
     spec_path.write_text(json.dumps(spec, indent=2), encoding="utf-8")
     print(f"Patched OpenAPI spec written to {spec_path} (version={version}, servers[0].url={public_url})")

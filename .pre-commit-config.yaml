@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: swisseph-boundary
+        name: Enforce ephemeris boundary (no direct swisseph imports)
+        entry: python tools/hooks/check_swisseph_imports.py
+        language: system
+        files: ^src/.*\.py$
+        pass_filenames: true

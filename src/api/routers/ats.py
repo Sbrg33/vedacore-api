@@ -283,6 +283,7 @@ async def get_status() -> ATSStatusResponse:
 # Backward compatibility endpoints (will deprecate)
 @router.get(
     "/health",
+    response_model=ATSStatusResponse,
     summary="ATS health (deprecated)",
     operation_id="ats_health",
 )

@@ -6,10 +6,15 @@ All endpoints use KP ayanamsha and traditional KP methods.
 """
 
 from typing import Dict, List, Optional, Any, Literal
+import os
+import time
 
 from fastapi import APIRouter, HTTPException
 from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, Field
+from shared.otel import get_tracer
+from shared.normalize import NORMALIZATION_VERSION, EPHEMERIS_DATASET_VERSION
+from shared.trace_attrs import set_common_attrs
 
 from .models import (
     BaseKPRequest,
@@ -19,6 +24,7 @@ from .models import (
 )
 
 router = APIRouter(prefix="/api/v1/kp", tags=["kp"], responses=DEFAULT_ERROR_RESPONSES)
+_tracer = get_tracer("kp")
 
 
 # Request/Response Models
@@ -110,11 +116,12 @@ async def calculate_kp_chart(request: ChartRequest) -> BaseResponse:
         from refactor.kp_significators import get_house_significators
         
         # Get KP houses data
-        kp_data = get_kp_houses_data(
-            timestamp=request.datetime,
-            latitude=request.lat,
-            longitude=request.lon
-        )
+        with _tracer.start_as_current_span("kp.chart"):
+            kp_data = get_kp_houses_data(
+                timestamp=request.datetime,
+                latitude=request.lat,
+                longitude=request.lon
+            )
         
         # Get significators if requested
         significators = None
@@ -161,41 +168,104 @@ async def calculate_kp_chain(request: ChainRequest) -> BaseResponse:
     with degrees, Nakshatra/Pada information, and house context.
     """
     try:
-        # Validate target format
+        from shared.normalize import normalize_inputs, content_addressed_key
+        from app.services.unified_cache import UnifiedCache
+        api_version = os.getenv("OPENAPI_VERSION", "1.1.2")
+        algo_version = os.getenv("ALGO_VERSION", "1.0.0")
+
+        # Build content-addressed cache key (deterministic)
+        normalized = normalize_inputs(
+            timestamp_iso=request.datetime.replace(tzinfo=None).isoformat() + "Z",
+            lat=request.lat,
+            lon=request.lon,
+            alt_m=None,
+        )
         target = request.target
-        if target.get("type") not in ["planet", "cusp"]:
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse.create(
-                    code="VALIDATION_ERROR",
-                    message="Target type must be 'planet' or 'cusp'",
-                    details={"provided": target.get("type")}
-                ).dict()
+        prefix = f"KP_CHAIN:{target.get('type')}:{target.get('id')}"
+        cache_key = content_addressed_key(
+            prefix=prefix,
+            normalized=normalized,
+            algo_version=algo_version,
+            api_version=api_version,
+        )
+        cache = UnifiedCache(system="KP_CHAIN")
+
+        with _tracer.start_as_current_span("kp.chain") as span:
+            # Try cache first
+            cached = await cache.get(cache_key)
+            if cached:
+                # Record cache hit on span and return
+                set_common_attrs(
+                    span,
+                    cache_status="HIT",
+                    compute_ms=0.0,
+                    algo_version=algo_version,
+                    api_version=api_version,
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                    target_type=target.get("type"),
+                    target_id=str(target.get("id")),
+                )
+                return BaseResponse.create(
+                    data=cached,
+                    path_template=PATH_TEMPLATES["kp_chain"],
+                    compute_units=1.0,
+                )
+
+            # Time the computation
+            t0 = time.perf_counter()
+
+            # Validate target format
+            if target.get("type") not in ["planet", "cusp"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=ErrorResponse.create(
+                        code="VALIDATION_ERROR",
+                        message="Target type must be 'planet' or 'cusp'",
+                        details={"provided": target.get("type")}
+                    ).dict()
+                )
+
+            # Import KP chain calculation
+            from refactor.kp_chain import get_kp_chain_for_target
+
+            chain_data = get_kp_chain_for_target(
+                timestamp=request.datetime,
+                latitude=request.lat,
+                longitude=request.lon,
+                target_type=target["type"],
+                target_id=target["id"]
             )
-        
-        # Import KP chain calculation
-        from refactor.kp_chain import get_kp_chain_for_target
-        
-        chain_data = get_kp_chain_for_target(
-            timestamp=request.datetime,
-            latitude=request.lat,
-            longitude=request.lon,
-            target_type=target["type"],
-            target_id=target["id"]
-        )
-        
-        response_data = ChainResponse(
-            target=target,
-            chain=chain_data["chain"],
-            degrees=chain_data["degrees"],
-            nakshatra_pada=chain_data["nakshatra_pada"]
-        )
-        
-        return BaseResponse.create(
-            data=response_data,
-            path_template=PATH_TEMPLATES["kp_chain"],
-            compute_units=1.0
-        )
+
+            response_data = ChainResponse(
+                target=target,
+                chain=chain_data["chain"],
+                degrees=chain_data["degrees"],
+                nakshatra_pada=chain_data["nakshatra_pada"]
+            )
+            # Write to cache
+            await cache.set(cache_key, response_data.model_dump(), ttl=600)
+
+            dt_ms = round((time.perf_counter() - t0) * 1000, 3)
+
+            # Record common span attributes
+            set_common_attrs(
+                span,
+                cache_status="MISS",
+                compute_ms=dt_ms,
+                algo_version=algo_version,
+                api_version=api_version,
+                norm_version=NORMALIZATION_VERSION,
+                eph_version=EPHEMERIS_DATASET_VERSION,
+                target_type=target.get("type"),
+                target_id=str(target.get("id")),
+            )
+
+            return BaseResponse.create(
+                data=response_data,
+                path_template=PATH_TEMPLATES["kp_chain"],
+                compute_units=1.0
+            )
         
     except HTTPException:
         raise
@@ -230,14 +300,15 @@ async def calculate_ruling_planets(request: RulingPlanetsRequest) -> BaseRespons
         overrides = (request.weights.dict(exclude_none=True) if request.weights else {})
         if not request.include_day_lord:
             overrides.setdefault("day_lord", 0.0)
-
-        rp_data = get_ruling_planets_data(
-            timestamp=request.datetime,
-            latitude=request.lat,
-            longitude=request.lon,
-            include_day_lord=request.include_day_lord,
-            weights=overrides if overrides else None
-        )
+        
+        with _tracer.start_as_current_span("kp.ruling_planets"):
+            rp_data = get_ruling_planets_data(
+                timestamp=request.datetime,
+                latitude=request.lat,
+                longitude=request.lon,
+                include_day_lord=request.include_day_lord,
+                weights=overrides if overrides else None
+            )
         
         return BaseResponse.create(
             data=rp_data,
@@ -272,11 +343,12 @@ async def calculate_kp_horary(request: HoraryRequest) -> BaseResponse:
         # Import KP horary calculation
         from interfaces.kp_horary_adapter import get_horary_calculation
         
-        horary_data = get_horary_calculation(
-            mode=request.mode,
-            value=request.value,
-            question=request.question
-        )
+        with _tracer.start_as_current_span("kp.horary"):
+            horary_data = get_horary_calculation(
+                mode=request.mode,
+                value=request.value,
+                question=request.question
+            )
         
         return BaseResponse.create(
             data=horary_data,
@@ -311,13 +383,14 @@ async def calculate_transit_events(request: TransitEventsRequest) -> BaseRespons
         # Import KP transit analysis
         from refactor.transit_event_detector import analyze_kp_transit_events
         
-        transit_data = analyze_kp_transit_events(
-            base_time=request.datetime,
-            latitude=request.lat,
-            longitude=request.lon,
-            window_hours=request.window_hours,
-            orb_degrees=request.orb_degrees
-        )
+        with _tracer.start_as_current_span("kp.transit_events"):
+            transit_data = analyze_kp_transit_events(
+                base_time=request.datetime,
+                latitude=request.lat,
+                longitude=request.lon,
+                window_hours=request.window_hours,
+                orb_degrees=request.orb_degrees
+            )
         
         return BaseResponse.create(
             data=transit_data,
@@ -333,3 +406,17 @@ async def calculate_transit_events(request: TransitEventsRequest) -> BaseRespons
                 message=f"KP transit events calculation failed: {str(e)}"
             ).dict()
         )
+# Placeholder analysis endpoint for contract completeness
+@router.post(
+    "/analysis",
+    response_model=BaseResponse,
+    summary="KP Analysis",
+    operation_id="v1_kp_analysis",
+)
+async def kp_analysis() -> BaseResponse:
+    """Contract placeholder for KP analysis; returns minimal structure."""
+    return BaseResponse.create(
+        data={"status": "not_implemented"},
+        path_template=PATH_TEMPLATES.get("kp_analysis", "/api/v1/kp/analysis"),
+        compute_units=0.01,
+    )

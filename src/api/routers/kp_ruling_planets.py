@@ -15,10 +15,12 @@ import logging
 import uuid
 
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from app.openapi.common import DEFAULT_ERROR_RESPONSES
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from api.models.responses import ServiceHealthResponse
 
 from constants.kp.types import Planet
 
@@ -267,6 +269,7 @@ async def get_schema() -> AdapterSchemaResponse:
 
 @router.get(
     "/explain",
+    response_model=dict[str, Any],
     summary="RP explain",
     operation_id="kpRP_explain",
 )
@@ -286,6 +289,7 @@ async def get_explanation():
 
 @router.get(
     "/health",
+    response_model=ServiceHealthResponse,
     summary="RP health",
     operation_id="kpRP_health",
 )

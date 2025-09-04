@@ -339,6 +339,7 @@ async def get_panchanga(
 
 @router.get(
     "/strength",
+    response_model=dict[str, Any],
     summary="Moon strength",
     operation_id="moon_strength",
 )
@@ -371,6 +372,7 @@ async def get_moon_strength(
 
 @router.get(
     "/config",
+    response_model=dict[str, Any],
     summary="Moon config",
     operation_id="moon_config",
 )

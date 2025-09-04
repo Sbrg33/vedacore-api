@@ -1,0 +1,100 @@
+asyncapi: '2.6.0'
+info:
+  title: VedaCore Streaming
+  version: '1.0.0'
+  description: >-
+    Canonical streaming contract. SSE is the public surface; WebSocket mirrors semantics.
+    Resume is based on Last-Event-ID using monotonically increasing event ids.
+    Auth: For browsers, pass a short‑TTL query token (`?token=`). For non‑browser clients,
+    send `Authorization: Bearer <token>`. If both are provided, the Authorization header
+    takes precedence.
+defaultContentType: application/json
+servers:
+  production:
+    url: https://api.vedacore.io
+    protocol: sse
+    description: Public SSE endpoint
+channels:
+  stream:
+    description: >-
+      SSE endpoint template. Connect with GET /api/v1/stream?topic={topic}&token={jwt}.
+      Client should send Last-Event-ID header on reconnect to resume from the last received
+      event id. If the requested resume id is older than the server's retained buffer,
+      the server emits a control event `event: reset` with `data: full-resync` and closes
+      the connection; the client should reconnect without Last-Event-ID. Server sends periodic
+      heartbeats and anti-buffer headers.
+    parameters:
+      topic:
+        description: Topic name
+        schema:
+          type: string
+    subscribe:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/UpdateEvent'
+          - $ref: '#/components/messages/HeartbeatEvent'
+          - $ref: '#/components/messages/ErrorEvent'
+          - $ref: '#/components/messages/ResetEvent'
+      bindings:
+        sse:
+          type: sse
+          method: GET
+          query:
+            type: object
+            properties:
+              topic: { type: string }
+              token: { type: string }
+          headers:
+            type: object
+            properties:
+              Last-Event-ID: { type: string, description: Event id to resume after }
+          extensions:
+            x-retry-ms: 15000
+components:
+  messages:
+    UpdateEvent:
+      name: update
+      title: Update
+      payload:
+        type: object
+        properties:
+          v: { type: integer }
+          ts: { type: string, format: date-time }
+          seq: { type: integer }
+          topic: { type: string }
+          event: { type: string }
+          payload: { type: object }
+    HeartbeatEvent:
+      name: heartbeat
+      title: Heartbeat
+      payload:
+        type: object
+        properties:
+          v: { type: integer }
+          ts: { type: string, format: date-time }
+          seq: { type: integer }
+          topic: { type: string }
+          event: { type: string, const: heartbeat }
+          payload: { type: object }
+    ErrorEvent:
+      name: error
+      title: Error
+      payload:
+        type: object
+        properties:
+          v: { type: integer }
+          ts: { type: string, format: date-time }
+          seq: { type: integer }
+          topic: { type: string }
+          event: { type: string, const: error }
+          payload:
+            type: object
+            properties:
+              message: { type: string }
+    ResetEvent:
+      name: reset
+      title: Reset (resume gap)
+      summary: Indicates the requested Last-Event-ID is older than retained buffer
+      payload:
+        type: string
+        enum: [ full-resync ]

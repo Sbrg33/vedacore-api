@@ -397,6 +397,10 @@ class Problem(BaseModel):
         None, description="URI reference that identifies the specific occurrence"
     )
     code: Optional[str] = Field(None, description="Application-specific error code")
+    trace_id: Optional[str] = Field(None, description="Trace identifier for correlation")
+    retry_after_seconds: Optional[int] = Field(
+        None, description="Seconds to wait before retrying (when applicable)"
+    )
 
 
 # =======================

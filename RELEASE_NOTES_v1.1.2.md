@@ -1,28 +1,23 @@
 VedaCore API v1.1.2 — Release Notes
 
+Overview
+VedaCore API v1.1.2 delivers hardened SSE streaming with dual authentication, deterministic resume, and stronger governance. The release is contract‑first and non‑breaking.
+
 Highlights
-- Security: Top-level HTTP Bearer in OpenAPI; REST requires JWT (docs & runtime aligned).
-- Streaming: SSE 200 responses now text/event-stream only; token query documented across stream endpoints.
-- Contracts: Added response models for root, version, systems, Moon strength/config, ATS health, KP RP health/explain.
-- Spec hygiene: Legacy shims hidden; normalized to OpenAPI 3.0.3; prod server exported.
-- SDKs: TypeScript client regenerated; Python client bumped to 1.1.2.
+- Dual SSE auth: header Bearer preferred; query tokens remain for browsers (short TTL, deprecation signaled).
+- Deterministic resume: Last-Event-ID with explicit `event: reset` on gaps.
+- Security by default: `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `Vary: Authorization, Accept`; 401/429 standardized.
+- Operational clarity: richer traces across hot paths; log redaction for tokens/referrers.
 
-SDKs
-- TypeScript: @vedacore/api@1.1.2
-- Python: veda_core_signals_api_client==1.1.2
+Developer notes
+- SSE client: implement a handler for `event: reset` to discard local state and reconnect.
+- Browser: add `<meta name="referrer" content="no-referrer">` and `Content-Security-Policy: connect-src https://api.vedacore.io;`.
+- Deprecation: query tokens sunset on Dec 31, 2025 (HTTP-date in Sunset header); migrate servers to Bearer.
 
-Operational
-- Spec: openapi.json frozen at 1.1.2 with global HTTPBearer + bearerAuth (legacy) and servers[0]=prod.
-- SSE: Sanitized OpenAPI content to advertise only text/event-stream for SSE endpoints.
-- Runtime: REST endpoints guarded by JWT; SSE/WS accept ?token= for browser compatibility.
+Compatibility
+No endpoint removals; OpenAPI 3.1 documents OR security, enriched headers, and 429 Problem body.
 
-Upgrade Guide
-- Update clients to @vedacore/api@1.1.2 or veda_core_signals_api_client==1.1.2.
-- Validate CORS in production: set CORS_ALLOWED_ORIGINS to explicit protocol-prefixed domains.
-- Prefer AUTH_JWKS_URL for managed IdPs; otherwise set strong AUTH_JWT_SECRET (>=32 chars).
-
-Verification Commands
+Verification
 - curl -fsS https://api.vedacore.io/api/v1/health/up
 - curl -fsS https://api.vedacore.io/api/docs >/dev/null && echo OK
-- curl -s https://api.vedacore.io/api/v1/version | jq .
-
+- curl -i -H "Accept: text/event-stream" -H "Authorization: Bearer $TOKEN" "https://api.vedacore.io/api/v1/stream?topic=kp.moon.chain" | sed -n '1,10p'

@@ -21,7 +21,7 @@ from .models import (
     PATH_TEMPLATES
 )
 
-router = APIRouter(prefix="/api/v1/jyotish", tags=["jyotish"], responses=DEFAULT_ERROR_RESPONSES)
+router = APIRouter(prefix="/api/v1/jyotish", tags=["reference"], responses=DEFAULT_ERROR_RESPONSES)
 
 
 # Request/Response Models

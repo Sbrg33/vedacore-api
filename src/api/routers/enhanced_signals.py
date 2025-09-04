@@ -37,11 +37,16 @@ from app.models.responses import (
 from app.services.enhanced_signals_service import get_enhanced_signals_service
 from api.services.auth import AuthContext, require_jwt_query
 from api.services.rate_limiter import rate_limiter
+from api.services.metrics import streaming_metrics
 from api.services.stream_manager import stream_manager
 from refactor.monitoring import Timer
+from shared.otel import get_tracer
+from shared.trace_attrs import set_common_attrs
+from shared.normalize import NORMALIZATION_VERSION, EPHEMERIS_DATASET_VERSION
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/signals", tags=["enhanced-signals"], responses=DEFAULT_ERROR_RESPONSES)
+_tracer = get_tracer("enhanced-signals")
 
 # Stream topics for enhanced signals
 SIGNAL_TOPICS = {
@@ -93,13 +98,31 @@ async def get_enhanced_intraday_signals(
             signals_service = await get_enhanced_signals_service()
             
             # Get multi-timeframe signals analysis
-            signals_data = await signals_service.get_multi_timeframe_signals(
-                date=request.date,
-                timeframes=request.timeframes,
-                planet_ids=request.planet_ids,
-                include_confluence=request.include_confluence,
-                use_cache=request.use_cache
-            )
+            t0 = time.perf_counter()
+            with _tracer.start_as_current_span("enhanced_signals.analyze") as span:
+                signals_data = await signals_service.get_multi_timeframe_signals(
+                    date=request.date,
+                    timeframes=request.timeframes,
+                    planet_ids=request.planet_ids,
+                    include_confluence=request.include_confluence,
+                    use_cache=request.use_cache
+                )
+                # Best-effort per-request tracing attributes
+                try:
+                    compute_ms = signals_data.get("metadata", {}).get("processing_time_ms")
+                    if compute_ms is None:
+                        compute_ms = round((time.perf_counter() - t0) * 1000, 3)
+                    set_common_attrs(
+                        span,
+                        cache_status="BYPASS" if not request.use_cache else "UNKNOWN",
+                        compute_ms=compute_ms,
+                        algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                        api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                        norm_version=NORMALIZATION_VERSION,
+                        eph_version=EPHEMERIS_DATASET_VERSION,
+                    )
+                except Exception:
+                    pass
             
             # Convert service response to API response models
             timeframe_analyses = {}
@@ -234,6 +257,21 @@ async def stream_enhanced_signals(
     Browser compatible with automatic reconnection support.
     """
     tenant_id = auth_context.require_tenant()
+    # Stream tracing span (handshake)
+    with _tracer.start_as_current_span("enhanced_signals.stream") as span:
+        if span:
+            try:
+                span.set_attribute("tenant", tenant_id)
+                span.set_attribute("timeframes", timeframes)
+                span.set_attribute("planets.count", len(planet_ids.split(",")))
+                span.set_attribute("confluence.threshold", confluence_threshold)
+                span.set_attribute("sse.auth_method", "query")
+            except Exception:
+                pass
+    try:
+        streaming_metrics.record_sse_handshake("query", "success")
+    except Exception:
+        pass
     
     # Parse parameters
     try:

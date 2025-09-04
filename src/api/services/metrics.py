@@ -63,6 +63,33 @@ vc_stream_latency_seconds = Histogram(
     ),
 )
 
+# SSE handshake outcomes by auth method
+vc_sse_handshake_total = Counter(
+    "vc_sse_handshake_total",
+    "SSE handshake attempts by method and outcome",
+    ["method", "outcome"],  # method: header, query, unknown; outcome: success, invalid_token, missing_token, rate_limited
+)
+
+# SSE handshake latency
+vc_sse_handshake_latency_seconds = Histogram(
+    "vc_sse_handshake_latency_seconds",
+    "Latency of SSE handshake",
+    ["method", "outcome"],
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, float("inf")),
+)
+
+# SSE reset events (resume gap)
+vc_sse_reset_total = Counter(
+    "vc_sse_reset_total", "Total SSE resets due to resume gap", ["topic"]
+)
+
+# SSE resume replayed count
+vc_sse_resume_replayed_total = Counter(
+    "vc_sse_resume_replayed_total",
+    "Total number of replayed events on SSE resume",
+    ["topic"],
+)
+
 # ===========================
 # AUTHENTICATION METRICS
 # ===========================
@@ -255,6 +282,19 @@ class StreamingMetricsCollector:
 
         if latency_seconds is not None:
             vc_stream_latency_seconds.labels(topic=topic).observe(latency_seconds)
+
+    def record_sse_handshake(self, method: str, outcome: str, latency_seconds: float | None = None):
+        """Record SSE handshake attempt."""
+        vc_sse_handshake_total.labels(method=method, outcome=outcome).inc()
+        if latency_seconds is not None:
+            vc_sse_handshake_latency_seconds.labels(method=method, outcome=outcome).observe(latency_seconds)
+
+    def record_sse_reset(self, topic: str):
+        vc_sse_reset_total.labels(topic=topic).inc()
+
+    def record_sse_resume_replayed(self, topic: str, count: int):
+        if count > 0:
+            vc_sse_resume_replayed_total.labels(topic=topic).inc(count)
 
     def record_message_dropped(self, topic: str, reason: str = "backpressure"):
         """Record a message dropped."""

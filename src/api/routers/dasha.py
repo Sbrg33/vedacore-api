@@ -6,6 +6,9 @@ Provides REST API for dasha calculations with caching and metrics.
 
 import logging
 import time
+import os
+import json
+import hashlib
 
 from datetime import date as DateType
 from datetime import datetime
@@ -18,6 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.services.cache_service import CacheService
 from app.utils.hash_keys import cache_key_hash
+from shared.normalize import NORMALIZATION_VERSION, EPHEMERIS_DATASET_VERSION
+from shared.otel import get_tracer
+from shared.trace_attrs import set_common_attrs
 from interfaces.kp_dasha_adapter import get_kp_dasha_adapter
 from refactor.time_utils import validate_utc_datetime
 
@@ -28,6 +34,7 @@ router = APIRouter(prefix="/api/v1", tags=["dasha"], responses=DEFAULT_ERROR_RES
 
 # Initialize cache service
 cache_service = CacheService()
+_tracer = get_tracer("dasha")
 
 # Prometheus metrics
 dasha_requests_total = Counter(
@@ -153,19 +160,20 @@ class DashaCycleRequest(BaseModel):
         return v
 
 
-def generate_cache_key(prefix: str, **kwargs) -> str:
-    """Generate cache key from parameters"""
-    # Sort kwargs for consistent key generation
-    sorted_items = sorted(kwargs.items())
-    key_str = f"{prefix}:" + ":".join(
-        f"{k}={v}" for k, v in sorted_items if v is not None
-    )
-
-    # Hash long keys
-    if len(key_str) > 200:
-        return f"{prefix}:{cache_key_hash(key_str)}"
-
-    return key_str
+def _content_addressed_key(prefix: str, payload: dict) -> str:
+    """Build content-addressed cache key with version stamps."""
+    algo_version = os.getenv("ALGO_VERSION", "1.0.0")
+    api_version = os.getenv("OPENAPI_VERSION", "1.1.2")
+    stamp = {
+        **payload,
+        "normalization_version": NORMALIZATION_VERSION,
+        "ephemeris_dataset_version": EPHEMERIS_DATASET_VERSION,
+        "algo_version": algo_version,
+        "api_version": api_version,
+    }
+    raw = json.dumps(stamp, separators=(",", ":"), sort_keys=True)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"{prefix}:{digest}"
 
 
 from api.models.responses import (
@@ -203,23 +211,37 @@ async def calculate_dasha(request: DashaRequest) -> DashaSnapshotResponse:
             endpoint="dasha", system=request.system, levels=str(request.levels)
         ).inc()
 
-        # Generate cache key (cache for 1 day per chart)
-        cache_key = generate_cache_key(
+        # Content-addressed cache key (1 day TTL)
+        cache_key = _content_addressed_key(
             "DASHA",
-            system=request.system,
-            birth=request.birth_time.isoformat(),
-            ref=request.timestamp.date().isoformat(),
-            levels=request.levels,
-            moon=request.moon_longitude,
-            chart=request.chart_id,
+            {
+                "system": request.system,
+                "birth": request.birth_time.isoformat(),
+                "ref": request.timestamp.date().isoformat(),
+                "levels": request.levels,
+                "moon": request.moon_longitude,
+                "chart": request.chart_id,
+            },
         )
 
         # Check cache
-        cached_result = cache_service.get(cache_key)
+        with _tracer.start_as_current_span("dasha.cache.get"):
+            cached_result = cache_service.get(cache_key)
         if cached_result:
             dasha_cache_hits_total.inc()
             cache_hit = True
             result = cached_result
+            # Trace cache hit
+            with _tracer.start_as_current_span("dasha.cache.hit") as span:
+                set_common_attrs(
+                    span,
+                    cache_status="HIT",
+                    compute_ms=0.0,
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
         else:
             dasha_cache_misses_total.inc()
 
@@ -235,16 +257,35 @@ async def calculate_dasha(request: DashaRequest) -> DashaSnapshotResponse:
                 )
 
             # Calculate dashas
-            result = adapter.snapshot(
+            t0 = time.perf_counter()
+            with _tracer.start_as_current_span("dasha.compute.snapshot") as span:
+                result = adapter.snapshot(
                 ts_utc=request.timestamp,
                 chart_id=request.chart_id,
                 birth_time=request.birth_time if not request.chart_id else None,
                 moon_longitude=request.moon_longitude,
                 levels=request.levels,
-            )
+                )
+                if span:
+                    try:
+                        span.set_attribute("dasha.levels", request.levels)
+                        span.set_attribute("dasha.chart_id", bool(request.chart_id))
+                    except Exception:
+                        pass
+                # Common attrs
+                set_common_attrs(
+                    span,
+                    cache_status="MISS",
+                    compute_ms=round((time.perf_counter()-t0)*1000, 3),
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
 
             # Cache result (TTL: 1 day)
-            cache_service.set(cache_key, result, ttl=86400)
+            with _tracer.start_as_current_span("dasha.cache.set"):
+                cache_service.set(cache_key, result, ttl=86400)
 
         # Add performance metadata
         compute_time = time.time() - start_time
@@ -289,23 +330,35 @@ async def get_dasha_changes(request: DashaChangesRequest) -> list[DashaChangeEve
             endpoint="changes", system=request.system, levels=str(request.levels)
         ).inc()
 
-        # Generate cache key
-        cache_key = generate_cache_key(
+        cache_key = _content_addressed_key(
             "DASHA_CHANGES",
-            system=request.system,
-            birth=request.birth_time.isoformat(),
-            date=request.date.isoformat(),
-            levels=request.levels,
-            moon=request.moon_longitude,
-            chart=request.chart_id,
+            {
+                "system": request.system,
+                "birth": request.birth_time.isoformat(),
+                "date": request.date.isoformat(),
+                "levels": request.levels,
+                "moon": request.moon_longitude,
+                "chart": request.chart_id,
+            },
         )
 
         # Check cache
-        cached_result = cache_service.get(cache_key)
+        with _tracer.start_as_current_span("dasha.cache.get"):
+            cached_result = cache_service.get(cache_key)
         if cached_result:
             dasha_cache_hits_total.inc()
             cache_hit = True
             changes = cached_result
+            with _tracer.start_as_current_span("dasha.cache.hit") as span:
+                set_common_attrs(
+                    span,
+                    cache_status="HIT",
+                    compute_ms=0.0,
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
         else:
             dasha_cache_misses_total.inc()
 
@@ -321,16 +374,34 @@ async def get_dasha_changes(request: DashaChangesRequest) -> list[DashaChangeEve
                 )
 
             # Get changes
-            changes = adapter.changes(
+            t0 = time.perf_counter()
+            with _tracer.start_as_current_span("dasha.compute.changes") as span:
+                changes = adapter.changes(
                 day_utc=request.date,
                 chart_id=request.chart_id,
                 birth_time=request.birth_time if not request.chart_id else None,
                 moon_longitude=request.moon_longitude,
                 levels=request.levels,
-            )
+                )
+                if span:
+                    try:
+                        span.set_attribute("dasha.levels", request.levels)
+                        span.set_attribute("dasha.events", len(changes))
+                    except Exception:
+                        pass
+                set_common_attrs(
+                    span,
+                    cache_status="MISS",
+                    compute_ms=round((time.perf_counter()-t0)*1000, 3),
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
 
             # Cache result (TTL: 1 day)
-            cache_service.set(cache_key, changes, ttl=86400)
+            with _tracer.start_as_current_span("dasha.cache.set"):
+                cache_service.set(cache_key, changes, ttl=86400)
 
         # Add metadata
         compute_time = time.time() - start_time
@@ -379,18 +450,20 @@ async def get_full_cycle(request: DashaCycleRequest) -> DashaCycleResponse:
         if request.levels > 3:
             logger.warning(f"Large dasha cycle requested with {request.levels} levels")
 
-        # Generate cache key
-        cache_key = generate_cache_key(
+        cache_key = _content_addressed_key(
             "DASHA_CYCLE",
-            system=request.system,
-            birth=request.birth_time.isoformat(),
-            levels=request.levels,
-            moon=request.moon_longitude,
-            chart=request.chart_id,
+            {
+                "system": request.system,
+                "birth": request.birth_time.isoformat(),
+                "levels": request.levels,
+                "moon": request.moon_longitude,
+                "chart": request.chart_id,
+            },
         )
 
         # Check cache
-        cached_result = cache_service.get(cache_key)
+        with _tracer.start_as_current_span("dasha.cache.get"):
+            cached_result = cache_service.get(cache_key)
         if cached_result:
             dasha_cache_hits_total.inc()
             cache_hit = True
@@ -410,15 +483,32 @@ async def get_full_cycle(request: DashaCycleRequest) -> DashaCycleResponse:
                 )
 
             # Get full cycle
-            result = adapter.get_full_cycle(
+            t0 = time.perf_counter()
+            with _tracer.start_as_current_span("dasha.compute.cycle") as span:
+                result = adapter.get_full_cycle(
                 chart_id=request.chart_id,
                 birth_time=request.birth_time if not request.chart_id else None,
                 moon_longitude=request.moon_longitude,
                 levels=request.levels,
-            )
+                )
+                if span:
+                    try:
+                        span.set_attribute("dasha.levels", request.levels)
+                    except Exception:
+                        pass
+                set_common_attrs(
+                    span,
+                    cache_status="MISS",
+                    compute_ms=round((time.perf_counter()-t0)*1000, 3),
+                    algo_version=os.getenv("ALGO_VERSION", "1.0.0"),
+                    api_version=os.getenv("OPENAPI_VERSION", "1.1.2"),
+                    norm_version=NORMALIZATION_VERSION,
+                    eph_version=EPHEMERIS_DATASET_VERSION,
+                )
 
             # Cache result (TTL: 7 days for full cycles)
-            cache_service.set(cache_key, result, ttl=604800)
+            with _tracer.start_as_current_span("dasha.cache.set"):
+                cache_service.set(cache_key, result, ttl=604800)
 
         # Add performance metadata
         compute_time = time.time() - start_time
