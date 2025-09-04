@@ -1,0 +1,15 @@
+:8081 {
+  # Flip this upstream between api_blue and api_green for blue/green rollouts
+  reverse_proxy api_blue:8000 {
+    # SSE-friendly: disable buffering and extend timeouts
+    flush_interval -1
+    transport http {
+      keepalive 3600s
+      read_timeout 3700s
+      write_timeout 3700s
+    }
+    # Optional: pass real client IP through Cloudflare
+    header_up X-Forwarded-Proto {scheme}
+  }
+}
+

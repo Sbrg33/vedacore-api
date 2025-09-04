@@ -1,0 +1,73 @@
+version: "3.9"
+
+# Blue/green services behind a Caddy reverse proxy for SSE-friendly routing.
+# Usage:
+#   1) Copy .env.example to .env and set secrets.
+#   2) Set image digests below (immutable!) for blue/green.
+#   3) docker compose up -d caddy api_blue
+#   4) Warm api_green with the new digest, then flip in Caddyfile and reload.
+
+services:
+  api_blue:
+    image: ghcr.io/yourorg/vedacore-api:v1.1.2@sha256:REPLACE_WITH_BLUE_DIGEST
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Force single worker for SSE stability unless you configure Redis resume.
+      - WORKERS=1
+      # Expose consistent internal port for proxying
+      - PORT=8000
+      # Graceful shutdown window (s) to drain SSE
+      - UVICORN_GRACEFUL_TIMEOUT=90
+    stop_grace_period: 90s
+    read_only: true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    networks: [web]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/v1/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  # Keep green stopped until ready to flip; start to warm, then point proxy.
+  api_green:
+    image: ghcr.io/yourorg/vedacore-api:vNEXT@sha256:REPLACE_WITH_GREEN_DIGEST
+    restart: "no"
+    env_file: .env
+    environment:
+      - WORKERS=1
+      - PORT=8000
+      - UVICORN_GRACEFUL_TIMEOUT=90
+    stop_grace_period: 90s
+    read_only: true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    networks: [web]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "8081:8081"  # Cloudflare origin port
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [web]
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+networks:
+  web: {}

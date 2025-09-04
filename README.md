@@ -61,6 +61,24 @@ docker run -d --name vedacore-api --restart unless-stopped -p 8000:8000 \
   vedacore-api
 ```
 
+### DigitalOcean (Blue/Green with Compose + Caddy)
+
+Files under `deploy/` provide a simple, SSE‑friendly blue/green rollout on a single droplet.
+
+- Compose/Caddy: `deploy/docker-compose.yml`, `deploy/Caddyfile`
+- Env template: `deploy/.env.example` (copy to `.env` and set secrets)
+- Flip script: `deploy/deploy_green.sh` (switches proxy to green, then stops blue)
+
+Steps (once):
+- Set immutable image digests in `deploy/docker-compose.yml` (`api_blue` and `api_green`).
+- `cd deploy && cp .env.example .env && edit .env`.
+- `docker compose up -d caddy api_blue`.
+
+Deploy a new version (zero‑downtime):
+- Edit `api_green.image` to the new digest in `deploy/docker-compose.yml`.
+- `cd deploy && ./deploy_green.sh`.
+- Rollback: switch `Caddyfile` back to `api_blue` and `docker compose up -d api_blue`.
+
 Health gate:
 ```bash
 curl -fsS http://localhost:8000/api/v1/health/ready || docker logs --tail 200 vedacore-api

@@ -35,10 +35,27 @@ fi
 
 APP_PORT="${PORT:-8000}"
 
+# Fail fast on missing critical env in production
+if [ "${ENVIRONMENT:-development}" = "production" ]; then
+  if [ -z "${AUTH_JWKS_URL:-}" ] && [ -z "${AUTH_JWT_SECRET:-}" ]; then
+    echo "ERROR: In production, set AUTH_JWKS_URL or AUTH_JWT_SECRET" >&2
+    exit 1
+  fi
+  if [ -z "${CORS_ALLOWED_ORIGINS:-}" ]; then
+    echo "ERROR: In production, set CORS_ALLOWED_ORIGINS (comma-separated, protocol-prefixed)" >&2
+    exit 1
+  fi
+fi
+
+# Graceful shutdown timeout (seconds)
+UVICORN_GRACEFUL_TIMEOUT="${UVICORN_GRACEFUL_TIMEOUT:-90}"
+
 # Honor reverse proxy headers (Cloudflare) for client IPs
 exec uvicorn apps.api.main:app \
   --host 0.0.0.0 \
   --port "${APP_PORT}" \
   --workers "${UVICORN_WORKERS}" \
+  --timeout-keep-alive 3600 \
+  --timeout-graceful "${UVICORN_GRACEFUL_TIMEOUT}" \
   --proxy-headers \
   --forwarded-allow-ips "*"
