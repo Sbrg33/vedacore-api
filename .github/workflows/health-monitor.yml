@@ -1,0 +1,73 @@
+name: Health Monitor
+
+on:
+  schedule:
+    # Run every 5 minutes during business hours (UTC)
+    - cron: '*/5 8-18 * * 1-5'
+    # Run hourly outside business hours
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check API Health
+        run: |
+          echo "🏥 Checking VedaCore API Health..."
+          
+          # Basic connectivity test
+          if curl -fsS --connect-timeout 10 --max-time 30 http://${{ secrets.DO_HOST }}/api/v1/health/up; then
+            echo "✅ Basic health check passed"
+          else
+            echo "❌ Basic health check failed"
+            exit 1
+          fi
+          
+          # Readiness check
+          if curl -fsS --connect-timeout 10 --max-time 30 http://${{ secrets.DO_HOST }}/api/v1/health/ready; then
+            echo "✅ Readiness check passed"
+          else
+            echo "❌ Readiness check failed"
+            exit 1
+          fi
+          
+          # Version verification
+          VERSION_INFO=$(curl -fsS http://${{ secrets.DO_HOST }}/api/v1/health/version 2>/dev/null || echo "{}")
+          echo "📊 Service Info: $VERSION_INFO"
+          
+          echo "🎉 All health checks passed!"
+
+      - name: Notify on Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_body = `## 🚨 VedaCore API Health Check Failed
+            
+            **Time:** ${new Date().toISOString()}
+            **Workflow:** ${{ github.workflow }}
+            **Run:** ${{ github.run_id }}
+            
+            ### Details
+            The automated health monitoring detected an issue with the VedaCore API deployment.
+            
+            ### Next Steps
+            1. Check the DigitalOcean droplet status
+            2. Verify the container is running: \`docker ps\`
+            3. Check container logs: \`docker logs vedacore-api\`
+            4. Restart if necessary: \`docker restart vedacore-api\`
+            
+            ### Links
+            - [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Repository](https://github.com/${{ github.repository }})
+            `;
+            
+            // Create an issue for tracking
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 API Health Check Failed - ${new Date().toISOString().split('T')[0]}`,
+              body: issue_body,
+              labels: ['bug', 'production', 'monitoring']
+            });
