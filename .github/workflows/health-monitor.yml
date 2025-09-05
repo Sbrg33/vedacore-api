@@ -6,8 +6,8 @@ permissions:
 
 on:
   schedule:
-    # Run every 5 minutes during business hours (UTC)
-    - cron: '*/5 8-18 * * 1-5'
+    # Run every 10 minutes during business hours (UTC)
+    - cron: '*/10 8-18 * * 1-5'
     # Run hourly outside business hours
     - cron: '0 * * * *'
   workflow_dispatch: {}
@@ -115,27 +115,28 @@ jobs:
           script_stop: false
           script: |
             set -euo pipefail
-            echo "== Docker containers =="
-            docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
-            echo
-            echo "== Recent logs (vedacore-api) =="
-            docker logs --tail 200 vedacore-api 2>&1 || true
-            echo
-            echo "== Local health checks =="
+            DIR=/tmp/vedacore-health
+            rm -rf "$DIR" && mkdir -p "$DIR"
+            docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' > "$DIR/docker_ps.txt" 2>&1 || true
+            docker logs --tail 1000 vedacore-api > "$DIR/logs.txt" 2>&1 || true
             for P in 80 8000; do
-              echo "-- Trying port $P --"
-              curl -sS -o /dev/null -w "HTTP %\{http_code\}\n" http://127.0.0.1:${P}/api/v1/health/up || true
-              curl -sS http://127.0.0.1:${P}/api/v1/health/version 2>/dev/null || true
-              echo
+              echo "-- Port $P /health/up --" > "$DIR/health_up_$P.txt"
+              curl -sv http://127.0.0.1:${P}/api/v1/health/up >> "$DIR/health_up_$P.txt" 2>&1 || true
+              curl -s http://127.0.0.1:${P}/api/v1/health/version > "$DIR/version_$P.json" 2>/dev/null || true
             done
-            echo "== Env sanity (masked) =="
-            env | sed -E 's/(AUTH_[A-Z_]+=).*/\1***MASKED***/; s/(CORS_ALLOWED_ORIGINS=).*/\1***MASKED***/' | sort || true
-            
-            // Create an issue for tracking
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🚨 API Health Check Failed - ${new Date().toISOString().split('T')[0]}`,
-              body: issue_body,
-              labels: ['bug', 'production', 'monitoring']
-            });
+            env | sed -E 's/(AUTH_[A-Z_]+=).*/\1***MASKED***/; s/(CORS_ALLOWED_ORIGINS=).*/\1***MASKED***/' | sort > "$DIR/env_masked.txt" || true
+            tar -C /tmp -czf /tmp/vedacore-health.tar.gz vedacore-health || true
+      - name: Download remote health snapshot
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.DO_PORT || '22' }}
+          source: "/tmp/vedacore-health.tar.gz"
+          target: "."
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-snapshot
+          path: vedacore-health.tar.gz
