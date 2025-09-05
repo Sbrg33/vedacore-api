@@ -19,6 +19,8 @@ env:
 jobs:
   build-push:
     runs-on: ubuntu-latest
+    # Build on tag pushes always; for branch pushes require opt-in flag in commit message
+    if: github.ref_type == 'tag' || contains(github.event.head_commit.message, '[build-image]')
     concurrency:
       group: ghcr-build-${{ github.ref }}
       cancel-in-progress: true

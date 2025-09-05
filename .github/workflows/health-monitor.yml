@@ -6,8 +6,8 @@ permissions:
 
 on:
   schedule:
-    # Run every 10 minutes during business hours (UTC)
-    - cron: '*/10 8-18 * * 1-5'
+    # Run every 15 minutes during business hours (UTC)
+    - cron: '*/15 8-18 * * 1-5'
     # Run hourly outside business hours
     - cron: '0 * * * *'
   workflow_dispatch: {}
@@ -20,7 +20,35 @@ jobs:
   health-check:
     runs-on: ubuntu-latest
     steps:
+      - name: Backoff gate (skip if repeated recent failures)
+        id: backoff
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const now = Date.now();
+            // Look at last 5 runs of this workflow
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.workflow,
+              per_page: 5
+            });
+            const recent = runs.data.workflow_runs
+              .filter(r => r.name === context.workflow)
+              .slice(0, 5);
+            const lastThree = recent.slice(0, 3);
+            const failures = lastThree.filter(r => r.conclusion === 'failure');
+            let shouldRun = true;
+            if (failures.length === 3) {
+              const lastTs = new Date(lastThree[0].updated_at).getTime();
+              // If last failure was within 30 minutes, back off this run
+              if (now - lastTs < 30 * 60 * 1000) shouldRun = false;
+            }
+            core.setOutput('should_run', shouldRun ? 'true' : 'false');
+            if (!shouldRun) core.notice('Health Monitor backoff: skipping due to consecutive recent failures');
+
       - name: Check API Health
+        if: steps.backoff.outputs.should_run == 'true'
         run: |
           echo "🏥 Checking VedaCore API Health..."
           
@@ -47,7 +75,7 @@ jobs:
           echo "🎉 All health checks passed!"
 
       - name: Notify on Failure (deduplicated)
-        if: failure()
+        if: steps.backoff.outputs.should_run == 'true' && failure()
         uses: actions/github-script@v7
         with:
           script: |
@@ -102,7 +130,7 @@ jobs:
 
   diagnose:
     needs: health-check
-    if: failure()
+    if: needs.health-check.result == 'failure'
     runs-on: ubuntu-latest
     steps:
       - name: SSH diagnose (container + local health)
@@ -119,6 +147,8 @@ jobs:
             rm -rf "$DIR" && mkdir -p "$DIR"
             docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' > "$DIR/docker_ps.txt" 2>&1 || true
             docker logs --tail 1000 vedacore-api > "$DIR/logs.txt" 2>&1 || true
+            echo "== System resources ==" > "$DIR/system.txt"
+            { echo '# df -h'; df -h; echo; echo '# free -m'; free -m; echo; echo '# uptime'; uptime; } >> "$DIR/system.txt" 2>&1 || true
             for P in 80 8000; do
               echo "-- Port $P /health/up --" > "$DIR/health_up_$P.txt"
               curl -sv http://127.0.0.1:${P}/api/v1/health/up >> "$DIR/health_up_$P.txt" 2>&1 || true
