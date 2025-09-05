@@ -1,6 +1,6 @@
 # Minimal Makefile for vedacore-api
 
-.PHONY: install run test test-fast smoke-local docker-build docker-run docker-stop docker-logs docker-smoke check-health test-contracts
+.PHONY: install run test test-fast test-parallel smoke-local docker-build docker-run docker-stop docker-logs docker-smoke check-health test-contracts
 
 # Base URL for check-health (override: make check-health BASE=https://api.vedacore.io)
 BASE ?= http://127.0.0.1:8000
@@ -18,6 +18,11 @@ test:
 # Even faster local run focused on unit + contracts, bails on first failure
 test-fast:
 	VC_SKIP_WARMUP=1 NUMBA_DISABLE_JIT=1 PYTHONPATH=./src:. pytest -x --tb=line tests/test_*.py tests/contracts/
+
+# Parallel run (requires pytest-xdist). Falls back to sequential if plugin missing.
+test-parallel:
+	VC_SKIP_WARMUP=1 NUMBA_DISABLE_JIT=1 PYTHONPATH=./src:. pytest -n auto -v --tb=short \
+	|| VC_SKIP_WARMUP=1 NUMBA_DISABLE_JIT=1 PYTHONPATH=./src:. pytest -v --tb=short
 
 # Run OpenAPI/contract tests in chunks to avoid local timeouts
 test-contracts:
