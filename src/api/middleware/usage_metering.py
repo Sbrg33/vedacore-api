@@ -240,10 +240,11 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
             base_units = 0.1  # Error responses are cheap
         
         # Adjust for duration (long requests cost more)
-        if duration_ms > 1000:  # > 1 second
-            base_units *= 1.5
-        elif duration_ms > 5000:  # > 5 seconds
+        # Check higher threshold first to ensure it is not shadowed by lower one.
+        if duration_ms > 5000:  # > 5 seconds
             base_units *= 2.0
+        elif duration_ms > 1000:  # > 1 second
+            base_units *= 1.5
         
         return base_units
     
