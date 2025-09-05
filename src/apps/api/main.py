@@ -56,6 +56,13 @@ from api.services.rate_limiter import check_qps_limit
 from fastapi.openapi.utils import get_openapi
 from shared.otel import init_tracing as _otel_init_tracing
 
+# Test/CI detection and warmup controls
+IN_TEST = (
+    os.getenv("VC_TEST_MODE", "false").lower() == "true"
+    or ("PYTEST_CURRENT_TEST" in os.environ)
+)
+SKIP_WARMUP = os.getenv("VC_SKIP_WARMUP", "false").lower() == "true"
+
 # Initialize structured logging EARLY (before any logger usage)
 setup_logging(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -267,8 +274,11 @@ async def _startup_initialization():
     await initialize_configurations()
     await initialize_systems()
     await _initialize_advisory_adapters()
-    await _initialize_production_hardening()
-    await initialize_warmup()
+    # Skip production hardening and JIT warmup during tests/CI or when explicitly disabled
+    if not IN_TEST:
+        await _initialize_production_hardening()
+    if not (IN_TEST or SKIP_WARMUP):
+        await initialize_warmup()
 
 
 async def _initialize_advisory_adapters():
@@ -322,9 +332,11 @@ async def _initialize_production_hardening():
 
 async def _initialize_background_services():
     """Initialize background services and return task list."""
-    _setup_prometheus_metrics()
-    _initialize_streaming_services()
-    await _start_moon_publisher()
+    # Keep background services light under tests/CI to avoid port conflicts and latency
+    if not IN_TEST:
+        _setup_prometheus_metrics()
+        _initialize_streaming_services()
+        await _start_moon_publisher()
     return []  # Return empty task list for now
 
 

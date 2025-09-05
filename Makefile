@@ -1,6 +1,6 @@
 # Minimal Makefile for vedacore-api
 
-.PHONY: install run test smoke-local docker-build docker-run docker-stop docker-logs docker-smoke check-health
+.PHONY: install run test smoke-local docker-build docker-run docker-stop docker-logs docker-smoke check-health test-contracts
 
 # Base URL for check-health (override: make check-health BASE=https://api.vedacore.io)
 BASE ?= http://127.0.0.1:8000
@@ -13,7 +13,19 @@ run:
 	PYTHONPATH=./src:. uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
 
 test:
-	PYTHONPATH=./src:. pytest -v --tb=short
+	VC_SKIP_WARMUP=1 NUMBA_DISABLE_JIT=1 PYTHONPATH=./src:. pytest -v --tb=short
+
+# Run OpenAPI/contract tests in chunks to avoid local timeouts
+test-contracts:
+	PYTHONPATH=./src:. pytest -q \
+		tests/contracts/test_content_type.py \
+		tests/contracts/test_openapi_contracts.py \
+		tests/contracts/test_operation_ids.py \
+		tests/contracts/test_openapi_headers.py
+	PYTHONPATH=./src:. pytest -q \
+		tests/contracts/test_paths_present.py \
+		tests/contracts/test_sse_openapi.py \
+		tests/contracts/test_timing_p95.py
 
 smoke-local:
 	@echo "💨 Local smoke: start API, check readiness, stop"
