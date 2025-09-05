@@ -47,6 +47,8 @@ except ImportError:
 DEFAULT_QPS_LIMIT = int(os.getenv("STREAM_RATE_LIMIT_QPS", "10"))
 DEFAULT_CONNECTION_LIMIT = int(os.getenv("STREAM_RATE_LIMIT_CONNECTIONS", "5"))
 DEFAULT_BURST_LIMIT = int(os.getenv("STREAM_RATE_LIMIT_BURST", "20"))
+# Idle TTL (seconds) after which inactive tenants can be pruned
+IDLE_TTL_SECONDS = float(os.getenv("RATE_LIMITER_IDLE_TTL", "600"))  # 10 minutes default
 
 
 @dataclass
@@ -111,6 +113,8 @@ class TenantLimits:
 
     # Connection tracking
     active_connections: int = 0
+    # Last activity timestamp (monotonic seconds)
+    last_activity: float = 0.0
 
     def get_qps_bucket(self) -> TokenBucket:
         """Get or create QPS token bucket."""
@@ -187,6 +191,10 @@ class RateLimiter:
                         tenant_id, "qps", usage_percent
                     )
 
+            # Update last activity timestamp and attempt cleanup if idle
+            limits.last_activity = time.monotonic()
+            self._maybe_cleanup_tenant(tenant_id, limits)
+
             return allowed
 
     async def allow_connection(self, tenant_id: str) -> bool:
@@ -229,7 +237,9 @@ class RateLimiter:
         """Register a new active connection for tenant."""
         lock = self._locks.setdefault(tenant_id, asyncio.Lock())
         async with lock:
-            self._limits[tenant_id].active_connections += 1
+            limits = self._limits[tenant_id]
+            limits.active_connections += 1
+            limits.last_activity = time.monotonic()
 
     async def remove_connection(self, tenant_id: str) -> None:
         """Remove an active connection for tenant."""
@@ -261,13 +271,40 @@ class RateLimiter:
                 l.burst_limit == DEFAULT_BURST_LIMIT
             )
             idle = l.active_connections == 0
+            now = time.monotonic()
             bucket_absent = (l.qps_bucket is None)
-            if idle and no_custom and bucket_absent:
+            bucket_inactive = False
+            if l.qps_bucket is not None:
+                # Consider bucket inactive if fully refilled and idle beyond TTL
+                tokens_full = l.qps_bucket.tokens >= l.burst_limit
+                bucket_idle = (now - l.qps_bucket.last_update) > IDLE_TTL_SECONDS
+                bucket_inactive = tokens_full and bucket_idle
+            became_stale = (now - (l.last_activity or now)) > IDLE_TTL_SECONDS
+            if idle and no_custom and (bucket_absent or bucket_inactive) and became_stale:
                 self._limits.pop(tenant_id, None)
                 self._locks.pop(tenant_id, None)
         except Exception:
             # Never raise during cleanup
             pass
+
+    async def snapshot_limits(self, tenant_id: str) -> tuple[int | None, float | None]:
+        """Safely snapshot current QPS limit and remaining tokens for a tenant.
+
+        Does not implicitly create new tenant entries. Returns (limit, remaining)
+        or (None, None) if tenant does not exist.
+        """
+        limits = self._limits.get(tenant_id)
+        if not limits:
+            return (None, None)
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
+            limit = int(limits.qps_limit)
+            bucket = limits.qps_bucket
+            if bucket is not None:
+                remaining = max(0.0, float(bucket.remaining_tokens()))
+            else:
+                remaining = float(limits.burst_limit)
+            return (limit, remaining)
 
     async def set_tenant_limits(
         self,

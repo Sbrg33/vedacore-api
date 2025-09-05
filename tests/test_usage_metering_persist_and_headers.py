@@ -81,7 +81,11 @@ async def test_emit_usage_event_failure_non_blocking(monkeypatch):
     )
 
 
-def test_rate_limit_headers_reflect_remaining_tokens():
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_headers_reflect_remaining_tokens():
     mw = UsageMeteringMiddleware(_dummy_app, enable_metering=False)
     resp = Response(content=b"ok", status_code=200)
 
@@ -95,7 +99,7 @@ def test_rate_limit_headers_reflect_remaining_tokens():
     bucket.tokens = 7.0
     bucket.last_update = __import__('time').monotonic()
 
-    resp = mw._add_rate_limit_headers(resp, {"tenant_id": tenant})
+    resp = await mw._add_rate_limit_headers(resp, {"tenant_id": tenant})
     assert resp.headers.get("X-RateLimit-Limit") == "15"
     remaining = int(resp.headers.get("X-RateLimit-Remaining", "0"))
     assert remaining >= 7  # may increment slightly due to timing
@@ -109,8 +113,7 @@ def test_rate_limit_headers_reflect_remaining_tokens():
     bucket2 = limits2.get_qps_bucket()
     bucket2.tokens = 2.0
     bucket2.last_update = __import__('time').monotonic()
-    resp2 = mw._add_rate_limit_headers(resp2, {"tenant_id": tenant2})
+    resp2 = await mw._add_rate_limit_headers(resp2, {"tenant_id": tenant2})
     assert resp2.headers.get("X-RateLimit-Limit") == "9"
     remaining2 = int(resp2.headers.get("X-RateLimit-Remaining", "0"))
     assert remaining2 >= 2
-

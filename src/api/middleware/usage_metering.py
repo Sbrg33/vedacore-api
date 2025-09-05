@@ -61,8 +61,8 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
         if not self.enable_metering:
             return await call_next(request)
         
-        # Start timing
-        start_time = time.time()
+        # Start timing (monotonic to avoid clock regressions)
+        start_time = time.perf_counter()
         request_start = datetime.now(timezone.utc)
         
         # Extract tenant info from token (if present)
@@ -76,11 +76,11 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             
             # Calculate metrics
-            duration_ms = int((time.time() - start_time) * 1000)
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
             bytes_out = self._get_response_size(response)
             
             # Add rate limit headers (PM requirement)
-            response = self._add_rate_limit_headers(response, tenant_info)
+            response = await self._add_rate_limit_headers(response, tenant_info)
             
             # Emit usage event (async, non-blocking)
             await self._emit_usage_event(
@@ -97,7 +97,7 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
             
         except Exception as e:
             # Still emit usage event for failed requests
-            duration_ms = int((time.time() - start_time) * 1000)
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
             
             try:
                 await self._emit_usage_event(
@@ -184,22 +184,24 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
         except Exception:
             return 0
     
-    def _add_rate_limit_headers(
+    async def _add_rate_limit_headers(
         self, 
         response: Response, 
         tenant_info: Dict[str, str]
     ) -> Response:
         """Add rate limit headers to response (PM requirement)."""
-        # Try to reflect current per-tenant QPS limits via the in-process rate limiter
+        # Reflect current per-tenant QPS limits via the in-process rate limiter
         remaining = None
         limit = None
         try:
             from api.services.rate_limiter import rate_limiter
             tenant_id = tenant_info.get("tenant_id") or "unknown"
-            limits = rate_limiter._limits[tenant_id]  # defaults applied on access
-            bucket = limits.get_qps_bucket()
-            limit = int(limits.qps_limit)
-            remaining = max(0, int(bucket.remaining_tokens()))
+            # Snapshot without creating new entries; synchronized under tenant lock
+            limit_val, remaining_val = await rate_limiter.snapshot_limits(tenant_id)
+            if limit_val is not None:
+                limit = limit_val
+            if remaining_val is not None:
+                remaining = int(max(0, remaining_val))
         except Exception:
             # Fallback: leave as None; we'll populate with defaults below
             pass
