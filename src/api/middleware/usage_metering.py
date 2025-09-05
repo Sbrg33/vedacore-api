@@ -18,15 +18,16 @@ import jwt
 from app.core.logging import get_api_logger
 from app.core.environment import get_complete_config
 from api.routers.v1.models import PATH_TEMPLATES
+from api.services.rate_limiter import (
+    DEFAULT_QPS_LIMIT,
+    DEFAULT_BURST_LIMIT,
+)
 
 logger = get_api_logger("usage_metering")
 
-# Rate limit headers (PM requirement)
-RATE_LIMIT_HEADERS = {
-    "X-RateLimit-Limit": "1000",     # Requests per hour
-    "X-RateLimit-Window": "3600",    # Window in seconds
-    "X-RateLimit-Reset": "",         # Will be calculated
-}
+# Default header values are aligned with centralized rate limiter defaults
+# (imported above). We no longer keep a separate constant with stale
+# placeholders to avoid drift.
 
 
 class UsageMeteringMiddleware(BaseHTTPMiddleware):
@@ -212,10 +213,16 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
         next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         reset_time = int(next_hour.timestamp())
         
-        # Add headers
-        response.headers["X-RateLimit-Limit"] = str(limit if limit is not None else 1000)
-        response.headers["X-RateLimit-Remaining"] = str(remaining if remaining is not None else 999)
+        # Add headers (fallbacks align with configured defaults)
+        # - Limit falls back to DEFAULT_QPS_LIMIT
+        # - Remaining falls back to DEFAULT_BURST_LIMIT (full bucket)
+        response.headers["X-RateLimit-Limit"] = str(limit if limit is not None else DEFAULT_QPS_LIMIT)
+        response.headers["X-RateLimit-Remaining"] = str(
+            remaining if remaining is not None else DEFAULT_BURST_LIMIT
+        )
         response.headers["X-RateLimit-Reset"] = str(reset_time)
+        # Optional: expose the window length in seconds (hourly window)
+        response.headers["X-RateLimit-Window"] = "3600"
         
         return response
     

@@ -91,7 +91,6 @@ async def test_rate_limit_headers_reflect_remaining_tokens():
 
     tenant = "tenant_headers"
     # Configure limits and bucket state
-    import time as _t
     limits = rate_limiter._limits[tenant]
     limits.qps_limit = 15
     limits.burst_limit = 20
