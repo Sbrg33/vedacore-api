@@ -2,14 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi.testclient import TestClient
-from apps.api.main import app
-
-
-client = TestClient(app)
-
-
-def test_kp_chain_contract_and_determinism():
+def test_kp_chain_contract_and_determinism(client):
     # Minimal, stable payload: use planet id 2 (Moon), lat/lon at origin
     payload = {
         "datetime": datetime(2025, 1, 1, 0, 0, tzinfo=timezone.utc).isoformat(),
@@ -35,4 +28,3 @@ def test_kp_chain_contract_and_determinism():
     assert r2.status_code == 200
     j2 = r2.json()
     assert j1 == j2
-

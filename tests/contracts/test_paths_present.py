@@ -1,16 +1,7 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-from apps.api.main import app
-
-
-client = TestClient(app)
-
-
-def test_critical_paths_present() -> None:
-    resp = client.get("/openapi.json")
-    resp.raise_for_status()
-    spec = resp.json()
+def test_critical_paths_present(openapi_spec) -> None:
+    spec = openapi_spec
     paths = set(spec.get("paths", {}).keys())
     expected = {
         "/api/v1/stream/topics",
@@ -20,4 +11,3 @@ def test_critical_paths_present() -> None:
     }
     missing = expected - paths
     assert not missing, f"Missing expected paths in OpenAPI: {sorted(missing)}"
-

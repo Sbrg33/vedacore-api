@@ -1,20 +1,10 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-from apps.api.main import app
+import pytest
 
 
-client = TestClient(app)
-
-
-def _openapi() -> dict:
-    r = client.get("/openapi.json")
-    assert r.status_code == 200
-    return r.json()
-
-
-def test_operation_ids_unique():
-    spec = _openapi()
+def test_operation_ids_unique(openapi_spec):
+    spec = openapi_spec
     op_ids = []
     for path_item in spec.get("paths", {}).values():
         for op in path_item.values():
@@ -25,8 +15,8 @@ def test_operation_ids_unique():
     assert len(op_ids) == len(set(op_ids)), "Duplicate operationIds found"
 
 
-def test_sse_contracts_have_token_param():
-    spec = _openapi()
+def test_sse_contracts_have_token_param(openapi_spec):
+    spec = openapi_spec
     for path, methods in spec.get("paths", {}).items():
         for method, op in methods.items():
             if not isinstance(op, dict):
@@ -40,8 +30,8 @@ def test_sse_contracts_have_token_param():
                 ), f"SSE route {path} missing token query param in OpenAPI"
 
 
-def test_basic_openapi_metadata_present():
-    spec = _openapi()
+def test_basic_openapi_metadata_present(openapi_spec):
+    spec = openapi_spec
     # Servers URL present
     servers = spec.get("servers", [])
     assert servers and isinstance(servers[0].get("url"), str) and servers[0]["url"]
@@ -49,8 +39,8 @@ def test_basic_openapi_metadata_present():
     assert info.get("version"), "API version must be set"
 
 
-def test_sse_has_429_problem_docs():
-    spec = _openapi()
+def test_sse_has_429_problem_docs(openapi_spec):
+    spec = openapi_spec
     # Check known SSE paths
     for path in ["/stream/{topic}", "/signals/stream/enhanced"]:
         if path in spec.get("paths", {}):
@@ -61,8 +51,8 @@ def test_sse_has_429_problem_docs():
                 assert "Retry-After" in headers
 
 
-def test_200_201_json_have_schema():
-    spec = _openapi()
+def test_200_201_json_have_schema(openapi_spec):
+    spec = openapi_spec
     for path, methods in spec.get("paths", {}).items():
         for method, op in methods.items():
             if not isinstance(op, dict):

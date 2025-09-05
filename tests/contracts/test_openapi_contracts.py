@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-from apps.api.main import app
-
-
-client = TestClient(app)
+import pytest
 
 
 def _has_json_200(path_item: dict, method: str) -> bool:
@@ -15,10 +11,8 @@ def _has_json_200(path_item: dict, method: str) -> bool:
         return False
 
 
-def test_openapi_includes_representative_routes():
-    r = client.get("/openapi.json")
-    assert r.status_code == 200, r.text
-    spec = r.json()
+def test_openapi_includes_representative_routes(openapi_spec):
+    spec = openapi_spec
     paths = spec.get("paths", {})
 
     # Representative endpoints updated with response models
@@ -31,4 +25,3 @@ def test_openapi_includes_representative_routes():
     for route, method in expected:
         assert route in paths, f"Missing route in OpenAPI: {route}"
         assert _has_json_200(paths[route], method), f"Missing 200 application/json for {route}"
-

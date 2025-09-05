@@ -61,7 +61,7 @@ IN_TEST = (
     os.getenv("VC_TEST_MODE", "false").lower() == "true"
     or ("PYTEST_CURRENT_TEST" in os.environ)
 )
-SKIP_WARMUP = os.getenv("VC_SKIP_WARMUP", "false").lower() == "true"
+SKIP_WARMUP = os.getenv("VC_SKIP_WARMUP", "false").lower() in ("true", "1")
 
 # Initialize structured logging EARLY (before any logger usage)
 setup_logging(

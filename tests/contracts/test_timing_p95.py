@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import time
-from fastapi.testclient import TestClient
-from apps.api.main import app
+import pytest
 
 
-client = TestClient(app)
-
-
-def test_ats_transit_p95_under_budget_and_deterministic():
+@pytest.mark.slow
+def test_ats_transit_p95_under_budget_and_deterministic(client):
     payload = {"targets": [6, 5]}  # VEN, MER (strict symbols also accepted)
 
     durations = []
@@ -34,4 +31,3 @@ def test_ats_transit_p95_under_budget_and_deterministic():
     p95 = durations[9]
     # Keep generous budget to avoid flakiness in CI
     assert p95 < 0.5  # seconds
-

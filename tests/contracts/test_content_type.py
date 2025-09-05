@@ -4,14 +4,11 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi.testclient import TestClient
 
 os.environ.setdefault("AUTH_JWT_SECRET", "test-secret")
 
+import pytest
 from apps.api.main import app  # noqa: E402
-
-
-client = TestClient(app)
 
 
 def make_stream_token(topic: str, ttl_seconds: int = 60) -> str:
@@ -30,7 +27,8 @@ def make_stream_token(topic: str, ttl_seconds: int = 60) -> str:
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-def test_event_stream_headers_present() -> None:
+@pytest.mark.integration
+def test_event_stream_headers_present(client) -> None:
     token = make_stream_token("kp.moon.chain", ttl_seconds=60)
     with client.stream(
         "GET",
