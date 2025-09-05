@@ -130,7 +130,8 @@ class RateLimiter:
 
     def __init__(self) -> None:
         self._limits: dict[str, TenantLimits] = defaultdict(self._default_limits)
-        self._lock = asyncio.Lock()
+        # Per-tenant locks to avoid cross-tenant contention
+        self._locks: dict[str, asyncio.Lock] = {}
         self._metrics = {
             "qps_violations": 0,
             "connection_violations": 0,
@@ -154,7 +155,8 @@ class RateLimiter:
         - Message publishing operations
         - Stream subscription requests
         """
-        async with self._lock:
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
             limits = self._limits[tenant_id]
             bucket = limits.get_qps_bucket()
             self._metrics["total_checks"] += 1
@@ -193,7 +195,8 @@ class RateLimiter:
         - SSE connection establishment
         - WebSocket connection establishment
         """
-        async with self._lock:
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
             limits = self._limits[tenant_id]
             self._metrics["total_checks"] += 1
 
@@ -222,12 +225,14 @@ class RateLimiter:
 
     async def add_connection(self, tenant_id: str) -> None:
         """Register a new active connection for tenant."""
-        async with self._lock:
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
             self._limits[tenant_id].active_connections += 1
 
     async def remove_connection(self, tenant_id: str) -> None:
         """Remove an active connection for tenant."""
-        async with self._lock:
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
             limits = self._limits[tenant_id]
             if limits.active_connections > 0:
                 limits.active_connections -= 1
@@ -241,7 +246,8 @@ class RateLimiter:
         burst_limit: int | None = None,
     ) -> None:
         """Update rate limits for a specific tenant."""
-        async with self._lock:
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
             limits = self._limits[tenant_id]
 
             if qps_limit is not None:
@@ -259,7 +265,8 @@ class RateLimiter:
 
     async def get_tenant_status(self, tenant_id: str) -> dict[str, Any]:
         """Get current rate limiting status for tenant."""
-        async with self._lock:
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
             limits = self._limits[tenant_id]
             bucket = limits.get_qps_bucket()
 
