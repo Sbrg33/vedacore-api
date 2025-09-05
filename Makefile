@@ -1,6 +1,6 @@
 # Minimal Makefile for vedacore-api
 
-.PHONY: install run test test-fast test-parallel smoke-local docker-build docker-run docker-stop docker-logs docker-smoke check-health test-contracts
+.PHONY: install run test test-fast test-parallel smoke-local docker-build docker-run docker-stop docker-logs docker-smoke check-health test-contracts clean clean-all
 
 # Base URL for check-health (override: make check-health BASE=https://api.vedacore.io)
 BASE ?= http://127.0.0.1:8000
@@ -90,3 +90,13 @@ sdk-ts:
 sdk-python:
 	@echo "Generating Python SDK (requires openapi-python-client)"
 	@openapi-python-client generate --path openapi.json --meta setup --output-path sdk/python
+
+# Cleanup helpers
+clean:
+	@echo "🧹 Cleaning caches and artifacts (safe)"
+	@find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+	@rm -rf .pytest_cache htmlcov coverage.xml
+
+clean-all: clean
+	@echo "🧹 Cleaning additional local venvs (.venv-*, keep .venv)"
+	@rm -rf .venv-api .venv-ci .venv-validate

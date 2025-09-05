@@ -4,6 +4,8 @@ __pycache__/
 .mypy_cache/
 .venv/
 .venv-validate/
+# Ignore any additional virtualenv variants created during experiments/CI
+.venv-*/
 *.egg-info/
 dist/
 build/

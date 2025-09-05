@@ -252,8 +252,15 @@ Sizing your client buffer:
 
 ## Testing
 
-- Run: `make test` or `PYTHONPATH=./src:. pytest -v`
-- Minimal suite validates docs, readiness, and metrics.
+- Fast run: `make test` (skips heavy warmup/JIT; sets `VC_SKIP_WARMUP=1` and `NUMBA_DISABLE_JIT=1`)
+- Very fast loop: `make test-fast` (unit + contracts, stop on first failure)
+- Contracts only: `make test-contracts` (runs in chunks to avoid local timeouts)
+- Parallel (requires `pytest-xdist`): `make test-parallel`
+- Manual: `PYTHONPATH=./src:. pytest -v` (include `-m "slow or integration"` for full coverage)
+
+Notes:
+- Default markers exclude `slow` and `integration` tests; run them explicitly when needed.
+- Local runs use a single session-scoped TestClient to speed up OpenAPI/contract checks.
 
 ## Contracts Governance
 
