@@ -60,14 +60,14 @@ jobs:
           openapi-python-client generate --path openapi.json --output-path sdk/python
           cd sdk/python
           python - <<'PY'
-import tomllib
-import tomli_w
-from pathlib import Path
-pp = Path('pyproject.toml')
-data = tomllib.loads(pp.read_text('utf-8'))
-data['project']['version'] = '${{ steps.ver.outputs.py }}'
-pp.write_text(tomli_w.dumps(data), 'utf-8')
-PY
+          import tomllib
+          import tomli_w
+          from pathlib import Path
+          pp = Path('pyproject.toml')
+          data = tomllib.loads(pp.read_text('utf-8'))
+          data['project']['version'] = '${{ steps.ver.outputs.py }}'
+          pp.write_text(tomli_w.dumps(data), 'utf-8')
+          PY
           python -m build
           twine upload dist/*
         env:
