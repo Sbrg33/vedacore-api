@@ -1,5 +1,9 @@
 name: Health Monitor
 
+permissions:
+  contents: read
+  issues: write
+
 on:
   schedule:
     # Run every 5 minutes during business hours (UTC)
@@ -7,6 +11,10 @@ on:
     # Run hourly outside business hours
     - cron: '0 * * * *'
   workflow_dispatch: {}
+
+concurrency:
+  group: health-monitor
+  cancel-in-progress: true
 
 jobs:
   health-check:
@@ -38,12 +46,13 @@ jobs:
           
           echo "🎉 All health checks passed!"
 
-      - name: Notify on Failure
+      - name: Notify on Failure (deduplicated)
         if: failure()
         uses: actions/github-script@v7
         with:
           script: |
-            const issue_body = `## 🚨 VedaCore API Health Check Failed
+            const title = `🚨 API Health Check Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `## 🚨 VedaCore API Health Check Failed
             
             **Time:** ${new Date().toISOString()}
             **Workflow:** ${{ github.workflow }}
@@ -62,6 +71,65 @@ jobs:
             - [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             - [Repository](https://github.com/${{ github.repository }})
             `;
+            
+            // Check for recent open monitoring issue to avoid duplicates
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'monitoring',
+              state: 'open',
+              per_page: 5,
+              sort: 'created',
+              direction: 'desc'
+            });
+            const existing = issues.find(i => i.title.startsWith('🚨 API Health Check Failed'));
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Additional failure detected at ${new Date().toISOString()} — see workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['bug', 'production', 'monitoring']
+              });
+            }
+
+  diagnose:
+    needs: health-check
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH diagnose (container + local health)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.DO_PORT || '22' }}
+          script_stop: false
+          script: |
+            set -euo pipefail
+            echo "== Docker containers =="
+            docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
+            echo
+            echo "== Recent logs (vedacore-api) =="
+            docker logs --tail 200 vedacore-api 2>&1 || true
+            echo
+            echo "== Local health checks =="
+            for P in 80 8000; do
+              echo "-- Trying port $P --"
+              curl -sS -o /dev/null -w "HTTP %\{http_code\}\n" http://127.0.0.1:${P}/api/v1/health/up || true
+              curl -sS http://127.0.0.1:${P}/api/v1/health/version 2>/dev/null || true
+              echo
+            done
+            echo "== Env sanity (masked) =="
+            env | sed -E 's/(AUTH_[A-Z_]+=).*/\1***MASKED***/; s/(CORS_ALLOWED_ORIGINS=).*/\1***MASKED***/' | sort || true
             
             // Create an issue for tracking
             await github.rest.issues.create({
