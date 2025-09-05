@@ -190,7 +190,20 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
         tenant_info: Dict[str, str]
     ) -> Response:
         """Add rate limit headers to response (PM requirement)."""
-        
+        # Try to reflect current per-tenant QPS limits via the in-process rate limiter
+        remaining = None
+        limit = None
+        try:
+            from api.services.rate_limiter import rate_limiter
+            tenant_id = tenant_info.get("tenant_id") or "unknown"
+            limits = rate_limiter._limits[tenant_id]  # defaults applied on access
+            bucket = limits.get_qps_bucket()
+            limit = int(limits.qps_limit)
+            remaining = max(0, int(bucket.remaining_tokens()))
+        except Exception:
+            # Fallback: leave as None; we'll populate with defaults below
+            pass
+
         # Calculate reset time (next hour)
         now = datetime.now(timezone.utc)
         next_hour = now.replace(minute=0, second=0, microsecond=0)
@@ -198,8 +211,8 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
         reset_time = int(next_hour.timestamp())
         
         # Add headers
-        response.headers["X-RateLimit-Limit"] = "1000"  # Per hour limit
-        response.headers["X-RateLimit-Remaining"] = "999"  # Would be calculated from DB
+        response.headers["X-RateLimit-Limit"] = str(limit if limit is not None else 1000)
+        response.headers["X-RateLimit-Remaining"] = str(remaining if remaining is not None else 999)
         response.headers["X-RateLimit-Reset"] = str(reset_time)
         
         return response
@@ -292,31 +305,63 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
                 }
             )
             
-            # TODO: Implement actual database insertion
-            # await self._insert_usage_event(event)
+            # Persist usage event (best-effort; non-blocking on failure)
+            await self._insert_usage_event(event)
             
         except Exception as e:
             # PM requirement: never block response on metering failure
             logger.warning(f"Failed to emit usage event: {e}")
     
     async def _insert_usage_event(self, event: Dict[str, Any]):
-        """Insert usage event into database (would be implemented with async DB client)."""
-        # SQL for reference (PM requirement):
-        SQL = """
-        INSERT INTO usage_events (
-            ts, tenant_id, api_key_id, path_template, method, 
-            status_code, duration_ms, bytes_in, bytes_out, 
-            region, cache, compute_units
-        ) VALUES (
-            %(ts)s, %(tenant_id)s, %(api_key_id)s, %(path_template)s, %(method)s,
-            %(status_code)s, %(duration_ms)s, %(bytes_in)s, %(bytes_out)s,
-            %(region)s, %(cache)s, %(compute_units)s
-        )
+        """Insert usage event into database using the project's async DB client.
+
+        Best-effort: any failure is logged and swallowed per PM requirement.
         """
-        
-        # This would execute the SQL with proper async database client
-        # await self.db_pool.execute(SQL, event)
-        pass
+        try:
+            from datetime import datetime
+            from app.services.supabase_signals import get_supabase_signals_service
+
+            svc = await get_supabase_signals_service()
+            if not getattr(svc, "enabled", False) or not getattr(svc, "pool", None):
+                # DB not configured; skip persist silently
+                return
+
+            # Convert values to types expected by asyncpg
+            ts = event.get("ts")
+            if isinstance(ts, str):
+                try:
+                    ts = datetime.fromisoformat(ts)
+                except Exception:
+                    ts = datetime.now(timezone.utc)
+
+            values = (
+                ts,
+                event.get("tenant_id"),
+                event.get("api_key_id"),
+                event.get("path_template"),
+                event.get("method"),
+                int(event.get("status_code", 200)),
+                int(event.get("duration_ms", 0)),
+                int(event.get("bytes_in", 0)),
+                int(event.get("bytes_out", 0)),
+                event.get("region"),
+                event.get("cache"),
+                float(event.get("compute_units", 1.0)),
+            )
+
+            SQL = (
+                "INSERT INTO usage_events ("
+                "ts, tenant_id, api_key_id, path_template, method, "
+                "status_code, duration_ms, bytes_in, bytes_out, "
+                "region, cache, compute_units) "
+                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)"
+            )
+
+            async with svc.get_connection() as conn:
+                await conn.execute(SQL, *values)
+
+        except Exception as e:
+            logger.warning(f"Usage event persist failed: {e}")
 
 
 def create_usage_tables_sql() -> str:
