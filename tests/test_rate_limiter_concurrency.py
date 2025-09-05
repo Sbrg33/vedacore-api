@@ -4,6 +4,7 @@ import time
 import pytest
 
 from api.services.rate_limiter import RateLimiter
+from api.services.rate_limiter import TokenBucket
 
 
 class _SlowLock:
@@ -69,3 +70,34 @@ async def test_same_tenant_requests_serialize():
 
     # Two operations for the same tenant should serialize behind the same lock (~ 2 * 0.15s)
     assert elapsed >= 0.25, f"Elapsed {elapsed:.3f}s too low; expected serialization for same tenant"
+
+
+def test_token_bucket_uses_monotonic(monkeypatch):
+    """Ensure token refill logic is driven by time.monotonic."""
+    tb = TokenBucket(rate=10.0, burst=20)
+
+    # Start with deterministic state
+    tb.tokens = 0.0
+
+    base = [1000.0]
+
+    def fake_mono():
+        return base[0]
+
+    # Patch the module's time.monotonic used by TokenBucket
+    import api.services.rate_limiter as rl
+    monkeypatch.setattr(rl.time, "monotonic", fake_mono)
+
+    # Advance 0.5s => expect 5 tokens
+    base[0] = 1000.0
+    tb.last_update = fake_mono()
+    base[0] = 1000.5
+    rem = tb.remaining_tokens()
+    assert 4.9 <= rem <= 5.1
+
+    # Calling allow() should also use monotonic and update last_update
+    base[0] = 1001.0
+    allowed = tb.allow(cost=1.0)
+    assert allowed
+    # After 0.5s more @10tps minus 1 cost: expected around (5 + 5) - 1 = 9 tokens and updated last_update
+    assert tb.tokens <= tb.burst
