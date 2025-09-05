@@ -30,11 +30,11 @@ jobs:
             const runs = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: context.workflow,
+              workflow_id: 'health-monitor.yml',
               per_page: 5
             });
             const recent = runs.data.workflow_runs
-              .filter(r => r.name === context.workflow)
+              .filter(r => r.name === 'Health Monitor')
               .slice(0, 5);
             const lastThree = recent.slice(0, 3);
             const failures = lastThree.filter(r => r.conclusion === 'failure');
