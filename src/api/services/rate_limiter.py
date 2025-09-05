@@ -275,9 +275,16 @@ class RateLimiter:
             bucket_absent = (l.qps_bucket is None)
             bucket_inactive = False
             if l.qps_bucket is not None:
+                # Refresh bucket to account for elapsed time before evaluating fullness
+                prev_last_update = l.qps_bucket.last_update
+                try:
+                    current_tokens = float(l.qps_bucket.remaining_tokens())
+                except Exception:
+                    current_tokens = l.qps_bucket.tokens
                 # Consider bucket inactive if fully refilled and idle beyond TTL
-                tokens_full = l.qps_bucket.tokens >= l.burst_limit
-                bucket_idle = (now - l.qps_bucket.last_update) > IDLE_TTL_SECONDS
+                tokens_full = current_tokens >= float(l.burst_limit)
+                # Use the pre-refresh timestamp to evaluate idleness window
+                bucket_idle = (now - prev_last_update) > IDLE_TTL_SECONDS
                 bucket_inactive = tokens_full and bucket_idle
             became_stale = (now - (l.last_activity or now)) > IDLE_TTL_SECONDS
             if idle and no_custom and (bucket_absent or bucket_inactive) and became_stale:

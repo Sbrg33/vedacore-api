@@ -81,9 +81,6 @@ async def test_emit_usage_event_failure_non_blocking(monkeypatch):
     )
 
 
-import pytest
-
-
 @pytest.mark.asyncio
 async def test_rate_limit_headers_reflect_remaining_tokens():
     mw = UsageMeteringMiddleware(_dummy_app, enable_metering=False)
