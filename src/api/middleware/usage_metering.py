@@ -7,7 +7,7 @@ Emits usage events for billing/quotas with tenant tracking.
 
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Callable, Optional, Dict, Any
 
 from fastapi import Request, Response
@@ -206,8 +206,8 @@ class UsageMeteringMiddleware(BaseHTTPMiddleware):
 
         # Calculate reset time (next hour)
         now = datetime.now(timezone.utc)
-        next_hour = now.replace(minute=0, second=0, microsecond=0)
-        next_hour = next_hour.replace(hour=next_hour.hour + 1)
+        # Handle hour rollover safely by adding an hour then zeroing minutes/seconds
+        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         reset_time = int(next_hour.timestamp())
         
         # Add headers

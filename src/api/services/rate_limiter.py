@@ -90,10 +90,12 @@ class TokenBucket:
         return False
 
     def remaining_tokens(self) -> float:
-        """Get remaining tokens after refill."""
+        """Get remaining tokens after refill and update bucket state."""
         now = time.monotonic()
         elapsed = now - self.last_update
-        return min(self.burst, self.tokens + (elapsed * self.rate))
+        self.tokens = min(self.burst, self.tokens + (elapsed * self.rate))
+        self.last_update = now
+        return self.tokens
 
 
 @dataclass
@@ -233,9 +235,39 @@ class RateLimiter:
         """Remove an active connection for tenant."""
         lock = self._locks.setdefault(tenant_id, asyncio.Lock())
         async with lock:
-            limits = self._limits[tenant_id]
+            limits = self._limits.get(tenant_id)
+            if not limits:
+                return
             if limits.active_connections > 0:
                 limits.active_connections -= 1
+            # Attempt cleanup of idle tenant state when back to defaults
+            self._maybe_cleanup_tenant(tenant_id, limits)
+
+    def _maybe_cleanup_tenant(self, tenant_id: str, limits: TenantLimits | None = None) -> None:
+        """Prune idle tenant state to prevent unbounded growth.
+
+        Removes entries when:
+        - active_connections == 0
+        - limits equal defaults (no custom overrides)
+        - qps_bucket not instantiated (transient state)
+        """
+        try:
+            l = limits or self._limits.get(tenant_id)
+            if not l:
+                return
+            no_custom = (
+                l.qps_limit == DEFAULT_QPS_LIMIT and
+                l.connection_limit == DEFAULT_CONNECTION_LIMIT and
+                l.burst_limit == DEFAULT_BURST_LIMIT
+            )
+            idle = l.active_connections == 0
+            bucket_absent = (l.qps_bucket is None)
+            if idle and no_custom and bucket_absent:
+                self._limits.pop(tenant_id, None)
+                self._locks.pop(tenant_id, None)
+        except Exception:
+            # Never raise during cleanup
+            pass
 
     async def set_tenant_limits(
         self,

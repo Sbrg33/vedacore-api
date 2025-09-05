@@ -100,4 +100,26 @@ def test_token_bucket_uses_monotonic(monkeypatch):
     allowed = tb.allow(cost=1.0)
     assert allowed
     # After 0.5s more @10tps minus 1 cost: expected around (5 + 5) - 1 = 9 tokens and updated last_update
-    assert tb.tokens <= tb.burst
+    assert 8.8 <= tb.tokens <= 9.2
+
+
+def test_remaining_tokens_updates_state(monkeypatch):
+    tb = TokenBucket(rate=20.0, burst=100)
+    tb.tokens = 0.0
+
+    base = [2000.0]
+    import api.services.rate_limiter as rl
+    monkeypatch.setattr(rl.time, "monotonic", lambda: base[0])
+
+    tb.last_update = base[0]
+    base[0] = 2000.25  # 250ms -> 5 tokens @ 20 tps
+    rem = tb.remaining_tokens()
+    assert 4.9 <= rem <= 5.1
+    # State advanced
+    assert 4.9 <= tb.tokens <= 5.1
+    last = tb.last_update
+
+    # No time elapsed -> state remains the same
+    rem2 = tb.remaining_tokens()
+    assert 4.9 <= rem2 <= 5.1
+    assert tb.last_update >= last
