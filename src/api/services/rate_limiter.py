@@ -65,7 +65,8 @@ class TokenBucket:
     def __post_init__(self):
         """Initialize with full burst capacity."""
         self.tokens = float(self.burst)
-        self.last_update = time.time()
+        # Use monotonic clock to avoid drift from system time changes
+        self.last_update = time.monotonic()
 
     def allow(self, cost: float = 1.0) -> bool:
         """
@@ -73,7 +74,8 @@ class TokenBucket:
 
         Returns True if request allowed, False if rate limited.
         """
-        now = time.time()
+        # Monotonic time for stable elapsed calculations
+        now = time.monotonic()
 
         # Refill tokens based on elapsed time
         elapsed = now - self.last_update
@@ -89,7 +91,7 @@ class TokenBucket:
 
     def remaining_tokens(self) -> float:
         """Get remaining tokens after refill."""
-        now = time.time()
+        now = time.monotonic()
         elapsed = now - self.last_update
         return min(self.burst, self.tokens + (elapsed * self.rate))
 
